@@ -1,0 +1,13 @@
+{
+  "name": "roostcast",
+  "version": "1.0.0",
+  "description": "Thermal simulator for bat houses. Tells you whether the box you are about to hang will cook the colony that moves into it.",
+  "license": "CC0-1.0",
+  "scripts": {
+    "build": "node tools/build.js",
+    "test": "node tools/validate.js",
+    "report": "node tools/report.js",
+    "smoke": "node tools/smoke.js"
+  },
+  "files": ["index.html", "src", "dist", "README.md", "REFERENCES.md"]
+}

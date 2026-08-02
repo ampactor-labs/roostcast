@@ -1,0 +1,44 @@
+
+Roostcast — the colour table versus the simulation
+Season: hottest of the last ten
+
+Box held constant: four-chamber nursery, full sun, 4 m, pole or wall.
+
+site              yr   JulyF  table says    model says               usable  table usable  verdict
+--------------------------------------------------------------------------------------------------------
+Austin, TX        2023 94     Dark          White · E · building     93%     89%           DISAGREES
+Carlsbad, NM      2025 91     Dark          Dark · NE · building     88%     88%           agrees
+Phoenix, AZ       2017 106    White         White · NE · building    80%     80%           agrees
+Miami, FL         2024 87     Dark          Black · N · building     100%    100%          DISAGREES
+Minneapolis, MN   2023 83     Black         Black · E · pole         72%     72%           agrees
+Portland, OR      2021 82     Black         White · SE · building    45%     49%           DISAGREES
+Lillooet, BC      2021 85     Black         White · E · building     54%     60%           DISAGREES
+Asheville, NC     2025 83     Black         Black · E · pole         74%     74%           agrees
+
+========================================================================================================
+4 of 8 sites where the colour table picks a different colour than the simulation.
+
+Austin, TX — MTBC home ground; Congress Ave bridge colony
+  July mean max 94 °F, so the table prescribes dark brown or dark grey.
+  Table's best:  Dark brown / dark grey, NE-facing, building — 89% usable, 26 h with no cool chamber, peak 43.7 °C
+  Model's best:  White, E-facing, building — 93% usable, 7 h with no cool chamber, peak 41.7 °C
+  Difference: +4 points of usable box, 0 fewer hours past 45 C.
+
+Miami, FL — humid subtropics, long maternity season
+  July mean max 87 °F, so the table prescribes dark brown or dark grey.
+  Table's best:  Dark brown / dark grey, N-facing, building — 100% usable, 0 h with no cool chamber, peak 38.1 °C
+  Model's best:  Black, N-facing, building — 100% usable, 0 h with no cool chamber, peak 38.4 °C
+  Difference: +0 points of usable box, 0 fewer hours past 45 C.
+
+Portland, OR — mild summers, 2021 heat dome
+  July mean max 82 °F, so the table prescribes black.
+  Table's best:  Black, N-facing, building — 49% usable, 14 h with no cool chamber, peak 47.1 °C
+  Model's best:  White, SE-facing, building — 45% usable, 13 h with no cool chamber, peak 45.8 °C
+  Difference: -4 points of usable box, 5 fewer hours past 45 C.
+
+Lillooet, BC — de Mel study area; 2021 heat dome epicentre
+  July mean max 85 °F, so the table prescribes black.
+  Table's best:  Black, NE-facing, building — 60% usable, 17 h with no cool chamber, peak 47.3 °C
+  Model's best:  White, E-facing, building — 54% usable, 8 h with no cool chamber, peak 44.6 °C
+  Difference: -6 points of usable box, 14 fewer hours past 45 C.
+

@@ -1,0 +1,1793 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roostcast — will this bat house cook?</title>
+<meta name="description" content="Simulates the temperature inside a bat house, hour by hour through the maternity season, at your exact location.">
+<style>
+:root{
+  --bg:#fbf9f5; --panel:#ffffff; --ink:#1c1a17; --muted:#6b6560; --line:#e3ddd2;
+  --accent:#0b6a9e; --accent-soft:#e6f0f6; --warn:#b35806; --hot:#7d2b12;
+  --cold:#2c5f8a; --good:#4a6f52;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#15140f; --panel:#1e1c17; --ink:#ece7dd; --muted:#9b948a; --line:#332f27;
+         --accent:#4aa8dc; --accent-soft:#152731; --warn:#e08214; --hot:#f08b5c; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans);
+     -webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px 80px}
+
+header{padding:52px 0 30px;border-bottom:1px solid var(--line);margin-bottom:34px}
+h1{font-size:clamp(28px,4.4vw,42px);line-height:1.08;margin:0 0 12px;letter-spacing:-.02em}
+h1 .dim{color:var(--muted);font-weight:400}
+.lede{font-size:17px;color:var(--muted);max-width:62ch;margin:0}
+.lede strong{color:var(--ink);font-weight:600}
+
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+   margin:0 0 14px;font-weight:600}
+h3{font-size:17px;margin:0 0 8px;letter-spacing:-.01em}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
+
+label{display:block;font-size:13px;color:var(--muted);margin:0 0 5px;font-weight:500}
+.field{margin-bottom:14px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input,select,button{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:7px;padding:9px 11px;width:100%}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+button{cursor:pointer;background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+button:hover{filter:brightness(1.08)}
+button:disabled{opacity:.5;cursor:default}
+button.ghost{background:transparent;color:var(--accent);border-color:var(--line);font-weight:500}
+
+.hits{list-style:none;margin:8px 0 0;padding:0;border:1px solid var(--line);border-radius:7px;
+      overflow:hidden;display:none}
+.hits.on{display:block}
+.hits li{padding:9px 11px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--line)}
+.hits li:last-child{border-bottom:0}
+.hits li:hover{background:var(--accent-soft)}
+.hits .sub{color:var(--muted);font-size:12.5px}
+
+.sitebar{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:12.5px;
+         color:var(--muted);margin-top:10px}
+
+#results{display:none}
+#results.on{display:block}
+
+.verdict{border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:10px;
+         background:var(--panel);padding:24px;margin-bottom:22px}
+.verdict.bad{border-left-color:var(--hot)}
+.verdict.warn{border-left-color:var(--warn)}
+.verdict.good{border-left-color:var(--good)}
+.verdict p{margin:0 0 10px;font-size:19px;line-height:1.42;letter-spacing:-.01em}
+.verdict p:last-child{margin-bottom:0}
+.verdict .why{font-size:15px;color:var(--muted)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+       background:var(--line);border:1px solid var(--line);border-radius:10px;
+       overflow:hidden;margin-bottom:24px}
+.stat{background:var(--panel);padding:15px 16px}
+.stat .n{font-size:26px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stat .k{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.35}
+.stat.alarm .n{color:var(--hot)}
+.stat.caution .n{color:var(--warn)}
+
+canvas{width:100%;display:block;border-radius:6px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.legend span{display:flex;align-items:center;gap:5px}
+.sw{width:13px;height:13px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:13px}
+tr.best td{background:var(--accent-soft)}
+tr.current td{font-weight:600}
+.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);
+     color:var(--accent);margin-left:6px;font-weight:600}
+
+details{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-size:14px;color:var(--accent);font-weight:500}
+details .body{font-size:14.5px;color:var(--muted);margin-top:10px;max-width:70ch}
+details .body p{margin:0 0 10px}
+details .body code{font-family:var(--mono);font-size:13px;background:var(--accent-soft);
+  padding:1px 4px;border-radius:3px}
+
+.note{font-size:13.5px;color:var(--muted);margin-top:8px}
+.err{color:var(--hot);font-size:14px;margin-top:10px}
+.spin{font-size:14px;color:var(--muted)}
+footer{margin-top:56px;padding-top:24px;border-top:1px solid var(--line);
+       font-size:13.5px;color:var(--muted);max-width:74ch}
+footer a{color:var(--accent)}
+footer p{margin:0 0 10px}
+.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Roostcast <span class="dim">— will this bat house cook?</span></h1>
+  <p class="lede">Bat house guidance still decides paint colour from one number: the average July high.
+  <strong>Under 85 °F, paint it black.</strong> That rule was written before boxes in full sun were
+  measured at 55 °C, hot enough to kill a colony in an afternoon. This simulates your box instead —
+  hour by hour, chamber by chamber, through a real maternity season at your coordinates.</p>
+</header>
+
+<div class="grid">
+  <div class="card">
+    <h2>Where</h2>
+    <div class="field">
+      <label for="q">Town, address, or landmark</label>
+      <input id="q" type="text" placeholder="Austin, Texas" autocomplete="off">
+      <ul class="hits" id="hits"></ul>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="lat">Latitude</label>
+        <input id="lat" type="number" step="0.001" value="30.267">
+      </div>
+      <div class="field">
+        <label for="lon">Longitude</label>
+        <input id="lon" type="number" step="0.001" value="-97.743">
+      </div>
+    </div>
+    <div class="field">
+      <label for="year">Season to simulate</label>
+      <select id="year"></select>
+    </div>
+    <div class="sitebar" id="sitebar"></div>
+  </div>
+
+  <div class="card">
+    <h2>The box</h2>
+    <div class="row">
+      <div class="field">
+        <label for="design">Design</label>
+        <select id="design"></select>
+      </div>
+      <div class="field">
+        <label for="color">Exterior colour</label>
+        <select id="color"></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="mount">Mounted on</label>
+        <select id="mount"></select>
+      </div>
+      <div class="field">
+        <label for="facing">Front faces</label>
+        <select id="facing"></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="exposure">Sun reaching it</label>
+        <select id="exposure"></select>
+      </div>
+      <div class="field">
+        <label for="height">Height above ground (m)</label>
+        <input id="height" type="number" step="0.5" min="1" max="12" value="4">
+      </div>
+    </div>
+    <button id="run">Simulate the season</button>
+    <div class="err" id="err"></div>
+    <div class="spin" id="spin"></div>
+  </div>
+</div>
+
+<div id="results">
+  <div class="verdict" id="verdict"></div>
+  <div class="stats" id="stats"></div>
+
+  <div class="card" style="margin-bottom:22px">
+    <h3>Every hour of the season</h3>
+    <p class="note" id="hmnote"></p>
+    <canvas id="heat" height="440"></canvas>
+    <div class="legend" id="hmlegend"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:22px">
+    <h3 id="worstTitle">The worst day</h3>
+    <p class="note">Each line is one chamber, front of the box to the back. The shaded band is
+    where a pregnant or nursing female can stay without going into torpor or overheating. If every
+    line leaves the band at once, the colony has nowhere to go: bats cannot relocate in daylight.</p>
+    <canvas id="dayplot" height="300"></canvas>
+    <div class="legend" id="dplegend"></div>
+  </div>
+
+  <div class="card">
+    <h3>What would work better here</h3>
+    <p class="note">Every combination of design, colour, orientation and mount, run against the same
+    season and ranked by how many daylight hours leave the colony somewhere survivable.</p>
+    <div class="scroll"><table id="sweep"></table></div>
+    <details>
+      <summary>How this compares to the standard colour table</summary>
+      <div class="body" id="tablecmp"></div>
+    </details>
+  </div>
+</div>
+
+<footer>
+  <p><strong>What this is.</strong> A transient thermal model of a bat house driven by ERA5
+  reanalysis weather for your coordinates. Nothing is fitted to the field measurements it is tested
+  against; the constants come from ASHRAE surface-property tables and published bat physiology.
+  Source, method and the validation run: <code>tools/validate.js</code> in the repository.</p>
+
+  <p><strong>What it is not.</strong> A substitute for a datalogger. Absolute temperatures carry
+  roughly ±5 °C of uncertainty, mostly from local shading and wind that a 9 km reanalysis grid cannot
+  see. The comparisons are far firmer than the absolute numbers, because a modelling error moves
+  every option in the same direction. Use it to choose between configurations, then verify the one
+  you install.</p>
+
+  <p><strong>Thermal thresholds</strong> 22–40 °C from Fontaine et al. 2021,
+  <em>Scientific Reports</em> 11:7728. Acute and lethal marks from de Mel, Baloun, Freeman &amp;
+  Czenze 2025, <em>Journal of Experimental Biology</em> 228:jeb251228. Colour table and placement
+  criteria from Merlin Tuttle's Bat Conservation. Weather from Open-Meteo's ERA5 archive.</p>
+
+  <p>Public domain (CC0). Built as a gift to the people who have spent their lives arguing that bats
+  are worth the trouble.</p>
+</footer>
+
+</div>
+
+<script>
+/* ===== src/solar.js ===== */
+// Solar position and irradiance transposition.
+//
+// Position: NOAA solar calculator equations (Meeus, low-precision set). Good to
+// ~0.01 deg, far tighter than anything downstream cares about.
+// Transposition: isotropic sky (Liu & Jordan 1960). Perez would be better for
+// tilted-plane accuracy but needs a coefficient table and buys us little here --
+// the dominant error in this model is the box, not the sky.
+
+(function (root) {
+  'use strict';
+
+  var RAD = Math.PI / 180;
+  var DEG = 180 / Math.PI;
+
+  // Julian day from a Date, using UTC.
+  function julianDay(date) {
+    return date.getTime() / 86400000 + 2440587.5;
+  }
+
+  // Sun position for an instant at a location.
+  // Returns zenith and azimuth in degrees; azimuth is compass-style,
+  // 0 = north, 90 = east, 180 = south, 270 = west.
+  function sunPosition(date, latDeg, lonDeg) {
+    var jd = julianDay(date);
+    var n = jd - 2451545.0;               // days from J2000.0
+    var T = n / 36525.0;                  // Julian centuries
+
+    var L0 = 280.46646 + T * (36000.76983 + T * 0.0003032);        // mean longitude
+    var M = 357.52911 + T * (35999.05029 - 0.0001537 * T);         // mean anomaly
+    var e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);    // eccentricity
+
+    var Mr = M * RAD;
+    var C = Math.sin(Mr) * (1.914602 - T * (0.004817 + 0.000014 * T)) +
+            Math.sin(2 * Mr) * (0.019993 - 0.000101 * T) +
+            Math.sin(3 * Mr) * 0.000289;                            // equation of center
+
+    var trueLong = L0 + C;
+    var omega = 125.04 - 1934.136 * T;
+    var appLong = trueLong - 0.00569 - 0.00478 * Math.sin(omega * RAD);
+
+    var eps0 = 23 + (26 + (21.448 - T * (46.815 + T * (0.00059 - T * 0.001813))) / 60) / 60;
+    var eps = eps0 + 0.00256 * Math.cos(omega * RAD);
+
+    var declRad = Math.asin(Math.sin(eps * RAD) * Math.sin(appLong * RAD));
+
+    // Equation of time, minutes.
+    var y = Math.tan(eps * RAD / 2); y = y * y;
+    var L0r = L0 * RAD;
+    var eqTime = 4 * DEG * (
+      y * Math.sin(2 * L0r) -
+      2 * e * Math.sin(Mr) +
+      4 * e * y * Math.sin(Mr) * Math.cos(2 * L0r) -
+      0.5 * y * y * Math.sin(4 * L0r) -
+      1.25 * e * e * Math.sin(2 * Mr)
+    );
+
+    // True solar time -> hour angle.
+    var minutesUTC = (jd - Math.floor(jd - 0.5) - 0.5) * 1440;
+    var trueSolarMin = minutesUTC + eqTime + 4 * lonDeg;
+    var hourAngle = trueSolarMin / 4 - 180;
+    while (hourAngle < -180) hourAngle += 360;
+    while (hourAngle > 180) hourAngle -= 360;
+
+    var latRad = latDeg * RAD;
+    var haRad = hourAngle * RAD;
+
+    var cosZen = Math.sin(latRad) * Math.sin(declRad) +
+                 Math.cos(latRad) * Math.cos(declRad) * Math.cos(haRad);
+    cosZen = Math.max(-1, Math.min(1, cosZen));
+    var zenith = Math.acos(cosZen) * DEG;
+
+    // Azimuth measured from north, clockwise. The +180 is not optional: the bare
+    // arccosine puts the sun due north at local noon, which silently swaps the
+    // front and back of every box in the model.
+    var azimuth;
+    var denom = Math.cos(latRad) * Math.sin(Math.acos(cosZen));
+    if (Math.abs(denom) < 1e-9) {
+      azimuth = latDeg > 0 ? 180 : 0;
+    } else {
+      var cosAz = (Math.sin(latRad) * cosZen - Math.sin(declRad)) / denom;
+      cosAz = Math.max(-1, Math.min(1, cosAz));
+      var acosAz = Math.acos(cosAz) * DEG;
+      azimuth = hourAngle > 0 ? (acosAz + 180) % 360 : (540 - acosAz) % 360;
+    }
+
+    return {
+      zenith: zenith,
+      elevation: 90 - zenith,
+      azimuth: azimuth,
+      declination: declRad * DEG
+    };
+  }
+
+  // Cosine of the incidence angle between the sun and a surface.
+  // tilt: 0 = horizontal (facing up), 90 = vertical.
+  // surfaceAzimuth: compass bearing the surface faces (0 = N, 180 = S).
+  function cosIncidence(sun, tiltDeg, surfaceAzimuthDeg) {
+    var z = sun.zenith * RAD;
+    var b = tiltDeg * RAD;
+    var gamma = (sun.azimuth - surfaceAzimuthDeg) * RAD;
+    return Math.cos(z) * Math.cos(b) + Math.sin(z) * Math.sin(b) * Math.cos(gamma);
+  }
+
+  // Total irradiance on a tilted surface, W/m^2.
+  //
+  // ghi/dni/dhi come straight from the reanalysis. skyMask and beamMask are the
+  // shading terms: what fraction of the sky dome and of the direct beam actually
+  // reach this surface after trees, eaves and walls take their cut.
+  function planeIrradiance(sun, tiltDeg, surfaceAzimuthDeg, ghi, dni, dhi, opts) {
+    opts = opts || {};
+    var albedo = opts.albedo == null ? 0.20 : opts.albedo;
+    var skyMask = opts.skyMask == null ? 1 : opts.skyMask;
+    var beamMask = opts.beamMask == null ? 1 : opts.beamMask;
+
+    var b = tiltDeg * RAD;
+    var viewSky = (1 + Math.cos(b)) / 2;
+    var viewGround = (1 - Math.cos(b)) / 2;
+
+    var cosI = cosIncidence(sun, tiltDeg, surfaceAzimuthDeg);
+    var beam = 0;
+    if (cosI > 0 && sun.elevation > 0) beam = dni * cosI * beamMask;
+
+    var diffuse = dhi * viewSky * skyMask;
+    var reflected = ghi * albedo * viewGround;
+
+    return {
+      total: beam + diffuse + reflected,
+      beam: beam,
+      diffuse: diffuse,
+      reflected: reflected,
+      cosIncidence: cosI,
+      viewSky: viewSky * skyMask
+    };
+  }
+
+  // Sunrise/sunset in local decimal hours, or null for polar day/night.
+  // Used only to decide when bats are home, so the 0.833 deg refraction
+  // convention is plenty.
+  function daylightWindow(date, latDeg, lonDeg, utcOffsetSeconds) {
+    var noonUTC = new Date(Date.UTC(
+      date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 12, 0, 0));
+    var sun = sunPosition(noonUTC, latDeg, lonDeg);
+    var decl = sun.declination * RAD;
+    var lat = latDeg * RAD;
+
+    var cosH = (Math.cos(90.833 * RAD) - Math.sin(lat) * Math.sin(decl)) /
+               (Math.cos(lat) * Math.cos(decl));
+    if (cosH > 1) return null;   // sun never rises
+    if (cosH < -1) return { sunrise: 0, sunset: 24 };
+
+    var H = Math.acos(cosH) * DEG / 15;
+    var solarNoonLocal = 12 - lonDeg / 15 + utcOffsetSeconds / 3600;
+    return { sunrise: solarNoonLocal - H, sunset: solarNoonLocal + H };
+  }
+
+  var api = {
+    sunPosition: sunPosition,
+    cosIncidence: cosIncidence,
+    planeIrradiance: planeIrradiance,
+    daylightWindow: daylightWindow
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Solar = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* ===== src/presets.js ===== */
+// Constants, thresholds and stock designs. Every number here traces to a
+// citation in REFERENCES.md. If you change one, change it there too.
+
+(function (root) {
+  'use strict';
+
+  var IN = 0.0254; // inch -> metre
+
+  // Solar absorptivity of painted exterior wood. ASHRAE Fundamentals ch. 18
+  // surface-property tables; the bracket labels are Tuttle's, the alpha values
+  // are the physics.
+  var COLORS = [
+    { id: 'black',      label: 'Black',                 alpha: 0.95, swatch: '#1b1b1e' },
+    { id: 'dark',       label: 'Dark brown / dark grey', alpha: 0.85, swatch: '#4a3728' },
+    { id: 'medium',     label: 'Medium brown / grey',    alpha: 0.70, swatch: '#8a6f52' },
+    { id: 'light',      label: 'Light tan / light grey', alpha: 0.45, swatch: '#c3ae90' },
+    { id: 'white',      label: 'White',                  alpha: 0.25, swatch: '#efeae1' }
+  ];
+
+  // Thermal thresholds for reproductive females and pups, degrees C.
+  //
+  // 22-40 is the Extended Optimal Temperature Range from Fontaine et al. 2021:
+  // below 22 a gestating or lactating female spends 50-70% of her time in torpor,
+  // which stalls fetal and pup development; above 40 bats abandon their preferred
+  // roost position to thermoregulate. 45 and 50 are the acute-risk marks from
+  // de Mel et al. 2025 -- at 50+ a small bat can lose over half its body mass to
+  // evaporative cooling in a single afternoon.
+  var THRESHOLDS = {
+    coldTorpor: 22,
+    heatStress: 40,
+    acute: 45,
+    lethal: 50
+  };
+
+  // Wood and air properties, SI.
+  var MATERIALS = {
+    pine:    { k: 0.12, rho: 500, cp: 1700, label: 'Pine / softwood board' },
+    plywood: { k: 0.13, rho: 550, cp: 1600, label: 'Exterior-grade plywood' },
+    cedar:   { k: 0.10, rho: 380, cp: 1700, label: 'Cedar' },
+    hdpe:    { k: 0.45, rho: 950, cp: 1900, label: 'Recycled plastic lumber' }
+  };
+
+  var AIR = { k: 0.026, rho: 1.16, cp: 1005 };
+
+  // Mount types. Each sets how much sky and sun the box actually sees and what
+  // it is thermally tied to.
+  //
+  // The occupancy note on each is Tuttle's field result, not a model output:
+  // pole-mounted houses beat tree-mounted ones badly and get found about two and
+  // a half times faster. It is printed in the UI because a thermally perfect box
+  // on a tree trunk is still a bad bat house.
+  var MOUNTS = {
+    pole: {
+      label: 'Free-standing pole',
+      skyMask: 1.0,
+      backExposed: true,
+      windShelter: 1.0,
+      note: 'Highest occupancy in field studies. Full sun control, fewest predators.'
+    },
+    building: {
+      label: 'Building wall',
+      skyMask: 0.95,
+      backExposed: false,
+      windShelter: 0.7,
+      note: 'Wall mass buffers night cooling; the back panel gets no sun.'
+    },
+    tree: {
+      label: 'Tree trunk',
+      skyMask: 0.35,
+      backExposed: false,
+      windShelter: 0.45,
+      note: 'Lowest occupancy of any mount. Shade, predator access, branches in the flight path.'
+    }
+  };
+
+  // Sun exposure at the site. `window` is the span of local hours when nothing
+  // obstructs the box; `beamIn` and `beamOut` are the fraction of the direct beam
+  // that gets through inside and outside that span. `skyScale` cuts the diffuse
+  // share, because whatever is blocking the sun is blocking sky as well.
+  var EXPOSURES = {
+    full:      { label: 'Full sun, all day',     window: [0, 24],     beamIn: 1.0,  beamOut: 1.0,  skyScale: 1.0 },
+    morning:   { label: 'Morning sun only',      window: [0, 13],     beamIn: 1.0,  beamOut: 0.05, skyScale: 0.80 },
+    afternoon: { label: 'Afternoon sun only',    window: [12, 24],    beamIn: 1.0,  beamOut: 0.05, skyScale: 0.80 },
+    partial:   { label: 'About 6 hours, midday', window: [9.5, 15.5], beamIn: 1.0,  beamOut: 0.05, skyScale: 0.75 },
+    dappled:   { label: 'Dappled / filtered',    window: [0, 24],     beamIn: 0.35, beamOut: 0.35, skyScale: 0.60 },
+    shade:     { label: 'Full shade',            window: [0, 24],     beamIn: 0.0,  beamOut: 0.0,  skyScale: 0.45 }
+  };
+
+  // Stock designs. Dimensions follow the published certification criteria:
+  // 3/4" roosting crevices, at least 24" tall, 4" landing area, rough interior.
+  var DESIGNS = {
+    single: {
+      label: 'Single-chamber (small)',
+      chambers: 1, height: 24 * IN, width: 16 * IN,
+      crevice: 0.75 * IN, panel: 0.75 * IN, ventSlot: false,
+      note: 'Warms and cools fast. No thermal choice for the colony.'
+    },
+    three: {
+      label: 'Three-chamber',
+      chambers: 3, height: 24 * IN, width: 24 * IN,
+      crevice: 0.75 * IN, panel: 0.75 * IN, ventSlot: true,
+      note: 'The common certified size.'
+    },
+    four: {
+      label: 'Four-chamber nursery',
+      chambers: 4, height: 32 * IN, width: 24 * IN,
+      crevice: 0.75 * IN, panel: 0.75 * IN, ventSlot: true,
+      note: 'Deepest front-to-back gradient, so the widest range of choices.'
+    },
+    rocket: {
+      label: 'Rocket box (four-sided)',
+      chambers: 4, height: 36 * IN, width: 12 * IN,
+      crevice: 0.75 * IN, panel: 0.75 * IN, ventSlot: false, wrapAround: true,
+      note: 'Wraps a central post, so some face is always shaded. Strong gradient by aspect.'
+    }
+  };
+
+  // Tuttle's colour table, the rule this tool exists to test.
+  // Keyed on mean daily maximum temperature in July, degrees C.
+  function tableRecommendation(julyMeanMaxC) {
+    var f = julyMeanMaxC * 9 / 5 + 32;
+    if (f < 85) return { color: 'black',  label: 'Black',                  julyF: f };
+    if (f < 95) return { color: 'dark',   label: 'Dark brown or dark grey', julyF: f };
+    if (f < 100) return { color: 'medium', label: 'Medium colour',          julyF: f };
+    return { color: 'white', label: 'White or light colour', julyF: f };
+  }
+
+  // A resting bat's metabolic heat output, watts. Normothermic RMR for a ~8 g
+  // vespertilionid, converted from oxygen consumption at 20.1 J/mL O2.
+  var BAT_WATTS = 0.07;
+
+  var api = {
+    IN: IN,
+    COLORS: COLORS,
+    THRESHOLDS: THRESHOLDS,
+    MATERIALS: MATERIALS,
+    AIR: AIR,
+    MOUNTS: MOUNTS,
+    EXPOSURES: EXPOSURES,
+    DESIGNS: DESIGNS,
+    BAT_WATTS: BAT_WATTS,
+    tableRecommendation: tableRecommendation,
+    colorById: function (id) {
+      for (var i = 0; i < COLORS.length; i++) if (COLORS[i].id === id) return COLORS[i];
+      return COLORS[0];
+    }
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Presets = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* ===== src/thermal.js ===== */
+// Transient thermal model of a bat house.
+//
+// Geometry, flat multi-chamber box, front to back:
+//
+//   panel0 | chamber0 | panel1 | chamber1 | panel2 | ... | chamberN-1 | panelN
+//
+// plus three lateral panels (left, right, roof).
+//
+// Each wood panel carries two nodes, one per face, connected through the board.
+// A 19 mm board in full sun has a Biot number over 1, so the sunlit face really
+// is meaningfully hotter than the face the bats touch, and lumping the panel into
+// a single node throws that gradient away. Sun is absorbed at the outer face and
+// convection and longwave happen at that same face, with no wood in between --
+// getting that wrong was the first version's largest error, worth about 19 C.
+//
+// Chamber air is not a state. Its time constant is under two seconds, so each
+// chamber is solved algebraically from the surfaces bounding it every step. That
+// is more accurate than integrating it, and it keeps the system non-stiff.
+//
+// Lateral panels touch a chamber only along the crevice edge, height times gap,
+// which is about 3% of the face area. So the front panel dominates, which is why
+// orientation and colour swamp everything else in the field data.
+
+(function (root) {
+  'use strict';
+
+  var Solar = (typeof require === 'function') ? require('./solar.js') : root.Solar;
+  var P = (typeof require === 'function') ? require('./presets.js') : root.Presets;
+
+  var SIGMA = 5.670374419e-8;
+  var EPS_WOOD = 0.90;
+
+  // ---------------------------------------------------------------- geometry
+
+  function buildBox(cfg) {
+    var design = P.DESIGNS[cfg.design] || P.DESIGNS.four;
+    var mat = P.MATERIALS[cfg.material || 'pine'];
+    var color = P.colorById(cfg.color);
+    var mount = P.MOUNTS[cfg.mount || 'pole'];
+
+    var n = design.chambers;
+    var H = design.height, W = design.width;
+    var t = design.panel, gap = design.crevice;
+    var depth = (n + 1) * t + n * gap;
+
+    var faceArea = H * W;
+    var sideArea = H * depth;
+    var roofArea = W * depth;
+    var halfC = mat.rho * mat.cp * (t / 2);      // per m^2, one face's half-board
+
+    var panels = [];
+    for (var k = 0; k <= n; k++) {
+      var ext = null, extSide = null;
+      if (k === 0) { ext = { azimuth: cfg.facing, tilt: 90 }; extSide = 'a'; }
+      else if (k === n && mount.backExposed) {
+        ext = { azimuth: (cfg.facing + 180) % 360, tilt: 90 }; extSide = 'b';
+      }
+      panels.push({
+        kind: k === 0 ? 'front' : (k === n ? 'back' : 'partition'),
+        area: faceArea,
+        C: halfC * faceArea,                      // per node
+        cond: mat.k * faceArea / (t / 2),         // face-to-face through the board
+        exterior: ext,
+        exteriorSide: extSide,
+        wallCoupled: (k === n && !mount.backExposed)
+      });
+    }
+
+    var lateral = [
+      { kind: 'left',  area: sideArea, C: halfC * sideArea,
+        cond: mat.k * sideArea / (t / 2), viewSky: 0.5,
+        exterior: { azimuth: (cfg.facing + 270) % 360, tilt: 90 },
+        contactPerChamber: H * gap },
+      { kind: 'right', area: sideArea, C: halfC * sideArea,
+        cond: mat.k * sideArea / (t / 2), viewSky: 0.5,
+        exterior: { azimuth: (cfg.facing + 90) % 360, tilt: 90 },
+        contactPerChamber: H * gap },
+      { kind: 'roof',  area: roofArea, C: halfC * roofArea,
+        cond: mat.k * roofArea / (t / 2), viewSky: 1.0,
+        exterior: { azimuth: cfg.facing, tilt: 15 },
+        contactPerChamber: W * gap }
+    ];
+
+    return {
+      design: design, mat: mat, color: color, mount: mount,
+      n: n, H: H, W: W, t: t, gap: gap, depth: depth,
+      faceArea: faceArea, sideArea: sideArea, roofArea: roofArea,
+      chamberVolume: faceArea * gap,
+      panels: panels, lateral: lateral,
+      facing: cfg.facing,
+      ventSlot: cfg.ventSlot != null ? cfg.ventSlot : !!design.ventSlot,
+      colony: cfg.colony == null ? 60 : cfg.colony
+    };
+  }
+
+  // ------------------------------------------------------------- heat transfer
+
+  // Exterior film conductance, W/m^2K. McAdams smooth-surface forced-convection
+  // fit, floored by natural convection off a hot vertical plate, combined the
+  // usual cubic way. The floor matters: on the calmest afternoons ERA5 reports
+  // wind under 0.2 m/s, and a pure forced-convection fit then under-cools a
+  // surface that is 35 K above air and driving its own plume.
+  function exteriorFilm(windAtBox, deltaT) {
+    var forced = 5.7 + 3.8 * Math.max(0, windAtBox);
+    var natural = 1.31 * Math.pow(Math.max(0.5, Math.abs(deltaT || 10)), 1 / 3);
+    return Math.pow(forced * forced * forced + natural * natural * natural, 1 / 3);
+  }
+
+  // ERA5 is a ~9 km grid and its calmest cells read below any real anemometer,
+  // so hold a light-air floor of 0.5 m/s at the box.
+  function windAtHeight(w10, heightM, shelter) {
+    var h = Math.max(1, heightM);
+    return Math.max(0.5, w10 * Math.pow(h / 10, 0.14) * shelter);
+  }
+
+  // Chimney flow through a roosting crevice.
+  //
+  // This is the term the first version got wrong by nearly two orders of
+  // magnitude. A crevice is open at the bottom, sometimes vented at the front,
+  // and 19 mm wide with hot wood on both sides: it does not exchange air at a
+  // building's few air changes per hour, it runs a continuous buoyant draught
+  // that turns over its own volume more than once a second. Treating it as
+  // infiltration made every box about 12 C too hot.
+  //
+  // Returns an effective conductance to outside air, W/K.
+  function ventConductance(box, chamberC, ambientC, windAtBox) {
+    var Tm = (chamberC + ambientC) / 2 + 273.15;
+    var dT = Math.max(0.05, chamberC - ambientC);
+    var Cd = 0.60;                                   // slot entry and exit losses
+    var vStack = Cd * Math.sqrt(2 * 9.81 * box.H * dT / Tm);
+    var vWind = 0.08 * windAtBox;                    // openings sit on one face
+    var v = Math.sqrt(vStack * vStack + vWind * vWind);
+
+    var aFlow = box.W * box.gap * (box.ventSlot ? 1.35 : 1.0);
+    var mdot = P.AIR.rho * v * aFlow;
+    return mdot * P.AIR.cp;
+  }
+
+  // Effective sky temperature: Berdahl & Martin clear-sky emissivity from the dew
+  // point, blended toward air temperature as cloud rises. This sets the overnight
+  // minimum, and the overnight minimum decides whether a female spends the night
+  // in torpor, so it is worth doing properly rather than with a flat offset.
+  function skyTemperature(tAirC, dewC, cloudFrac) {
+    var Ta = tAirC + 273.15;
+    var td = dewC / 100;
+    var epsClear = 0.711 + 0.56 * td + 0.73 * td * td;
+    epsClear = Math.max(0.65, Math.min(0.95, epsClear));
+    var c = Math.max(0, Math.min(1, cloudFrac));
+    var epsSky = epsClear + (1 - epsClear) * c;
+    return Math.pow(epsSky, 0.25) * Ta - 273.15;
+  }
+
+  function dewPoint(tC, rhPct) {
+    var rh = Math.max(1, Math.min(100, rhPct)) / 100;
+    var a = 17.625, b = 243.04;
+    var g = Math.log(rh) + (a * tC) / (b + tC);
+    return (b * g) / (a - g);
+  }
+
+  // Interior film in a 19 mm crevice: radiation between two high-emissivity
+  // faces, conduction across the gap, and a stack-driven flow term. The flow term
+  // is why a vent slot cools a box. Not by flushing air out -- the air in a
+  // crevice has no heat capacity worth flushing -- but by scrubbing the wood.
+  // Radiant exchange coefficient between the two faces of a crevice, W/m^2K.
+  function radiantFilm(tSurfC, tAirC) {
+    var Tm = (tSurfC + tAirC) / 2 + 273.15;
+    return 4 * SIGMA * Tm * Tm * Tm / (2 / EPS_WOOD - 1);
+  }
+
+  function interiorFilm(tSurfC, tAirC, boxHeight, hasVent, gap) {
+    var hRad = radiantFilm(tSurfC, tAirC);
+    var dT = Math.abs(tSurfC - tAirC);
+    var Tm = (tSurfC + tAirC) / 2 + 273.15;
+    var v = Math.sqrt(2 * 9.81 * boxHeight * Math.max(0.1, dT) / Tm);
+    if (hasVent) v *= 1.5;
+    var hFlow = 1.5 + 5.0 * Math.min(v, 1.5);
+    var hCond = P.AIR.k / gap;
+    return hRad + hCond + hFlow;
+  }
+
+  // Net flux into an exposed face: absorbed sun, convection, longwave to sky and
+  // ground. No wood resistance here -- this is the surface itself.
+  function exteriorFlux(Tface, Tair, Tsky, irradiance, alpha, hOut, area, viewSky) {
+    var Ts = Tface + 273.15, Tk = Tsky + 273.15, Tg = Tair + 273.15;
+    return alpha * irradiance * area +
+           hOut * area * (Tair - Tface) -
+           EPS_WOOD * SIGMA * area * (
+             viewSky * (Ts * Ts * Ts * Ts - Tk * Tk * Tk * Tk) +
+             (1 - viewSky) * (Ts * Ts * Ts * Ts - Tg * Tg * Tg * Tg));
+  }
+
+  function beamAvailable(localHour, exposure) {
+    var w = exposure.window;
+    return (localHour >= w[0] && localHour <= w[1]) ? exposure.beamIn : exposure.beamOut;
+  }
+
+  function num(v, fallback) { return (v == null || isNaN(v)) ? fallback : v; }
+
+  // ------------------------------------------------------------------ stepping
+
+  function simulate(climate, site, cfg) {
+    var box = buildBox(cfg);
+    var n = box.n;
+    var exposure = P.EXPOSURES[cfg.exposure || 'full'];
+    var alpha = box.color.alpha;
+    var heightM = cfg.heightM == null ? 4.0 : cfg.heightM;
+
+    // 20 substeps is 3-minute integration. The explicit scheme needs dt under
+    // about 425 s to stay stable on the outer panel node, so anything above 9
+    // substeps per hour is safe; sweeps drop to 12 to run four times faster.
+    var hours = climate.time.length;
+    var subSteps = cfg.subSteps || 20;
+    var dt = 3600 / subSteps;
+
+    var nP = n + 1;
+    var Pa = new Float64Array(nP);         // panel front-facing faces
+    var Pb = new Float64Array(nP);         // panel back-facing faces
+    var La = new Float64Array(3);          // lateral outer faces
+    var Lb = new Float64Array(3);          // lateral inner faces
+    var chamberT = new Float64Array(n);
+
+    var t0 = num(climate.temperature_2m[0], 15);
+    Pa.fill(t0); Pb.fill(t0); La.fill(t0); Lb.fill(t0); chamberT.fill(t0);
+    var wallT = t0;
+
+    var out = {
+      time: climate.time,
+      chambers: [],        // operative temperature -- what a bat experiences
+      chambersAir: [],     // the through-draught
+      chambersSurf: [],    // the wood it hangs from
+      ambient: new Float64Array(hours),
+      frontFace: new Float64Array(hours),
+      isDay: new Uint8Array(hours),
+      solarFront: new Float64Array(hours)
+    };
+    for (var c0 = 0; c0 < n; c0++) {
+      out.chambers.push(new Float64Array(hours));
+      out.chambersAir.push(new Float64Array(hours));
+      out.chambersSurf.push(new Float64Array(hours));
+    }
+
+    var utcOff = site.utcOffsetSeconds || 0;
+    var hInt = new Float64Array(n);
+
+    for (var h = 0; h < hours; h++) {
+      var nx = Math.min(h + 1, hours - 1);
+      var Ta0 = num(climate.temperature_2m[h], t0);
+      var Ta1 = num(climate.temperature_2m[nx], Ta0);
+      var rh = num(climate.relative_humidity_2m[h], 60);
+      var cloud = num(climate.cloud_cover[h], 40) / 100;
+      var w10 = num(climate.wind_speed_10m[h], 7) / 3.6;   // API delivers km/h
+      var ghi = num(climate.shortwave_radiation[h], 0);
+      var dni = num(climate.direct_normal_irradiance[h], 0);
+      var dhi = num(climate.diffuse_radiation[h], 0);
+
+      var stampUTC = Date.parse(climate.time[h] + ':00Z') - utcOff * 1000;
+      var sun = Solar.sunPosition(new Date(stampUTC), site.latitude, site.longitude);
+      var localHour = ((stampUTC + utcOff * 1000) / 3600000) % 24;
+      if (localHour < 0) localHour += 24;
+
+      var beamMask = beamAvailable(localHour, exposure);
+      var skyMask = box.mount.skyMask * exposure.skyScale;
+      var vBox = windAtHeight(w10, heightM, box.mount.windShelter);
+      var hOut = exteriorFilm(vBox, Pa[0] - Ta0);
+      var Tsky = skyTemperature(Ta0, dewPoint(Ta0, rh), cloud);
+
+      var irrP = new Float64Array(nP);
+      for (var pi = 0; pi < nP; pi++) {
+        var e = box.panels[pi].exterior;
+        irrP[pi] = e ? Solar.planeIrradiance(sun, e.tilt, e.azimuth, ghi, dni, dhi,
+          { skyMask: skyMask, beamMask: beamMask }).total : 0;
+      }
+      var irrL = new Float64Array(3);
+      for (var li = 0; li < 3; li++) {
+        var el = box.lateral[li].exterior;
+        irrL[li] = Solar.planeIrradiance(sun, el.tilt, el.azimuth, ghi, dni, dhi,
+          { skyMask: skyMask, beamMask: beamMask }).total;
+      }
+
+      var day = sun.elevation > 0;
+      var batW = day ? box.colony * P.BAT_WATTS : 0;
+
+      for (var s = 0; s < subSteps; s++) {
+        var Ta = Ta0 + (Ta1 - Ta0) * ((s + 0.5) / subSteps);
+
+        // Chambers: quasi-steady between the two faces bounding them, plus the
+        // crevice-edge contact with the lateral panels.
+        for (var i = 0; i < n; i++) {
+          var fFront = Pb[i];               // back face of the panel in front
+          var fBack = Pa[i + 1];            // front face of the panel behind
+          var hi = interiorFilm((fFront + fBack) / 2, chamberT[i], box.H, box.ventSlot, box.gap);
+          hInt[i] = hi;
+
+          var Kf = hi * box.faceArea;
+          var Kside = hi * box.lateral[0].contactPerChamber;
+          var Kroof = hi * box.lateral[2].contactPerChamber;
+          var Kvent = ventConductance(box, chamberT[i], Ta, vBox);
+
+          var numer = Kf * fFront + Kf * fBack +
+                      Kside * Lb[0] + Kside * Lb[1] + Kroof * Lb[2] +
+                      Kvent * Ta + batW / n;
+          var denom = 2 * Kf + 2 * Kside + Kroof + Kvent;
+          chamberT[i] = numer / denom;
+        }
+
+        // Depth panels: two faces each.
+        var dPa = new Float64Array(nP), dPb = new Float64Array(nP);
+        for (var j = 0; j < nP; j++) {
+          var pn = box.panels[j];
+          var through = pn.cond * (Pb[j] - Pa[j]);       // b -> a positive
+          var qa = through, qb = -through;
+
+          if (pn.exterior && pn.exteriorSide === 'a') {
+            qa += exteriorFlux(Pa[j], Ta, Tsky, irrP[j], alpha, hOut, pn.area, 0.5);
+          } else if (j > 0) {
+            qa += hInt[j - 1] * pn.area * (chamberT[j - 1] - Pa[j]);
+          }
+
+          if (pn.exterior && pn.exteriorSide === 'b') {
+            qb += exteriorFlux(Pb[j], Ta, Tsky, irrP[j], alpha, hOut, pn.area, 0.5);
+          } else if (pn.wallCoupled) {
+            qb += 2.5 * pn.area * (wallT - Pb[j]);
+          } else if (j < n) {
+            qb += hInt[j] * pn.area * (chamberT[j] - Pb[j]);
+          }
+
+          dPa[j] = qa / pn.C;
+          dPb[j] = qb / pn.C;
+        }
+
+        // Lateral panels.
+        var dLa = new Float64Array(3), dLb = new Float64Array(3);
+        for (var m = 0; m < 3; m++) {
+          var lp = box.lateral[m];
+          var thr = lp.cond * (Lb[m] - La[m]);
+          var qo = thr + exteriorFlux(La[m], Ta, Tsky, irrL[m], alpha, hOut, lp.area, lp.viewSky);
+          var qi = -thr;
+          for (var ck = 0; ck < n; ck++) {
+            qi += hInt[ck] * lp.contactPerChamber * (chamberT[ck] - Lb[m]);
+          }
+          // The rest of the inner face looks at the panels beside it, near enough
+          // to the mean chamber temperature to treat as such.
+          var leftover = lp.area - lp.contactPerChamber * n;
+          if (leftover > 0) {
+            var meanCh = 0;
+            for (var cm = 0; cm < n; cm++) meanCh += chamberT[cm];
+            meanCh /= n;
+            qi += 4.0 * leftover * (meanCh - Lb[m]);
+          }
+          dLa[m] = qo / lp.C;
+          dLb[m] = qi / lp.C;
+        }
+
+        for (var a = 0; a < nP; a++) { Pa[a] += dPa[a] * dt; Pb[a] += dPb[a] * dt; }
+        for (var b2 = 0; b2 < 3; b2++) { La[b2] += dLa[b2] * dt; Lb[b2] += dLb[b2] * dt; }
+        wallT += (Ta - wallT) * dt / (5 * 86400);
+      }
+
+      // What the bat is actually exposed to.
+      //
+      // A roosting bat is pressed against wood inside a channel with a buoyant
+      // draught running through it. Air temperature alone is the wrong answer --
+      // it under-reads badly on a sunlit afternoon, when the draught is cool and
+      // the wood the colony is clinging to is not. Operative temperature blends
+      // the two by their transfer coefficients, which is also much closer to what
+      // a logger taped inside a crevice records.
+      for (var z = 0; z < n; z++) {
+        var surf = (Pb[z] + Pa[z + 1]) / 2;
+        var hr = radiantFilm(surf, chamberT[z]);
+        var hc = Math.max(0.5, hInt[z] - hr);
+        out.chambersAir[z][h] = chamberT[z];
+        out.chambersSurf[z][h] = surf;
+        out.chambers[z][h] = (hr * surf + hc * chamberT[z]) / (hr + hc);
+      }
+      out.ambient[h] = Ta0;
+      out.frontFace[h] = Pa[0];
+      out.isDay[h] = day ? 1 : 0;
+      out.solarFront[h] = irrP[0];
+    }
+
+    out.box = box;
+    return out;
+  }
+
+  // --------------------------------------------------------------- scoring
+
+  // The metric that matters: at each daytime hour, can a bat find a chamber in
+  // the survivable band? A box with one good chamber and three lethal ones still
+  // works. A box where every chamber is over 40 C is a trap, because a roosting
+  // bat cannot leave in daylight.
+  function score(result, thresholds) {
+    var T = thresholds || P.THRESHOLDS;
+    var n = result.chambers.length;
+    var hours = result.time.length;
+
+    var dayHours = 0, refuge = 0, lockout = 0, acute = 0, lethal = 0, cold = 0;
+    var peak = -Infinity, peakIdx = -1, minT = Infinity;
+    var gradSum = 0, gradN = 0;
+    var usableCells = 0, totalCells = 0;
+    var daily = {};
+
+    for (var h = 0; h < hours; h++) {
+      var lo = Infinity, hi = -Infinity, anyOk = false, okCount = 0;
+      for (var c = 0; c < n; c++) {
+        var t = result.chambers[c][h];
+        if (t < lo) lo = t;
+        if (t > hi) hi = t;
+        if (t >= T.coldTorpor && t <= T.heatStress) { anyOk = true; okCount++; }
+      }
+      if (hi > peak) { peak = hi; peakIdx = h; }
+      if (lo < minT) minT = lo;
+
+      var day = result.time[h].slice(0, 10);
+      if (!daily[day]) daily[day] = { max: -Infinity, min: Infinity, refuge: 0, dayHours: 0, lockout: 0 };
+      if (hi > daily[day].max) daily[day].max = hi;
+      if (lo < daily[day].min) daily[day].min = lo;
+
+      if (result.isDay[h]) {
+        dayHours++;
+        daily[day].dayHours++;
+        gradSum += (hi - lo); gradN++;
+        usableCells += okCount; totalCells += n;
+        if (anyOk) { refuge++; daily[day].refuge++; }
+        if (lo > T.heatStress) { lockout++; daily[day].lockout++; }
+        if (hi > T.acute) acute++;
+        if (hi > T.lethal) lethal++;
+        if (hi < T.coldTorpor) cold++;
+      }
+    }
+
+    return {
+      dayHours: dayHours,
+      refugeHours: refuge,
+      // Whether the colony has anywhere to go. Saturates near 100% on any
+      // multi-chamber box, so it is a floor, not a ranking.
+      refugePct: dayHours ? 100 * refuge / dayHours : 0,
+      // How much of the box works, not just whether any of it does. This is the
+      // one with enough range to rank configurations against each other.
+      usablePct: totalCells ? 100 * usableCells / totalCells : 0,
+      lockoutHours: lockout,
+      acuteHours: acute,
+      lethalHours: lethal,
+      coldHours: cold,
+      peakC: peak,
+      peakAt: peakIdx >= 0 ? result.time[peakIdx] : null,
+      minC: minT,
+      meanGradient: gradN ? gradSum / gradN : 0,
+      daily: daily
+    };
+  }
+
+  var api = {
+    buildBox: buildBox,
+    simulate: simulate,
+    score: score,
+    skyTemperature: skyTemperature,
+    dewPoint: dewPoint,
+    interiorFilm: interiorFilm,
+    exteriorFilm: exteriorFilm,
+    windAtHeight: windAtHeight
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Thermal = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* ===== src/climate.js ===== */
+// Climate input. Open-Meteo's ERA5 archive: free, no key, CORS open, hourly back
+// to 1940, and it hands back elevation and the local UTC offset so we do not have
+// to guess either.
+//
+// Everything here is cached in localStorage when there is one, because a season
+// of hourly data is about 3000 rows and nobody should re-pull it to try a
+// different paint colour.
+
+(function (root) {
+  'use strict';
+
+  var ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive';
+  var GEOCODE = 'https://geocoding-api.open-meteo.com/v1/search';
+
+  var HOURLY = [
+    'temperature_2m',
+    'relative_humidity_2m',
+    'shortwave_radiation',
+    'direct_normal_irradiance',
+    'diffuse_radiation',
+    'wind_speed_10m',
+    'cloud_cover'
+  ].join(',');
+
+  function store() {
+    try { return (typeof localStorage !== 'undefined') ? localStorage : null; }
+    catch (e) { return null; }
+  }
+
+  function cacheGet(key) {
+    var s = store();
+    if (!s) return null;
+    try { var v = s.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+  }
+
+  function cacheSet(key, val) {
+    var s = store();
+    if (!s) return;
+    try { s.setItem(key, JSON.stringify(val)); }
+    catch (e) { try { s.clear(); s.setItem(key, JSON.stringify(val)); } catch (e2) {} }
+  }
+
+  function geocode(query) {
+    var url = GEOCODE + '?name=' + encodeURIComponent(query) + '&count=8&language=en&format=json';
+    return fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+      return (j.results || []).map(function (r) {
+        return {
+          name: r.name,
+          admin: [r.admin1, r.country].filter(Boolean).join(', '),
+          latitude: r.latitude,
+          longitude: r.longitude,
+          elevation: r.elevation
+        };
+      });
+    });
+  }
+
+  // One season of hourly weather. `year` is the calendar year; start and end are
+  // 'MM-DD'.
+  function fetchSeason(lat, lon, year, startMD, endMD) {
+    var start = year + '-' + startMD;
+    var end = year + '-' + endMD;
+    var key = 'rc:' + lat.toFixed(3) + ',' + lon.toFixed(3) + ':' + start + ':' + end;
+    var hit = cacheGet(key);
+    if (hit) return Promise.resolve(hit);
+
+    var url = ARCHIVE +
+      '?latitude=' + lat.toFixed(4) +
+      '&longitude=' + lon.toFixed(4) +
+      '&start_date=' + start +
+      '&end_date=' + end +
+      '&hourly=' + HOURLY +
+      '&timezone=auto';
+
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('Weather archive returned ' + r.status);
+      return r.json();
+    }).then(function (j) {
+      if (!j.hourly) throw new Error('No hourly data for that location and window.');
+      var out = {
+        site: {
+          latitude: j.latitude,
+          longitude: j.longitude,
+          elevation: j.elevation,
+          timezone: j.timezone,
+          utcOffsetSeconds: j.utc_offset_seconds
+        },
+        year: year,
+        time: j.hourly.time,
+        temperature_2m: j.hourly.temperature_2m,
+        relative_humidity_2m: j.hourly.relative_humidity_2m,
+        shortwave_radiation: j.hourly.shortwave_radiation,
+        direct_normal_irradiance: j.hourly.direct_normal_irradiance,
+        diffuse_radiation: j.hourly.diffuse_radiation,
+        wind_speed_10m: j.hourly.wind_speed_10m,
+        cloud_cover: j.hourly.cloud_cover
+      };
+      cacheSet(key, out);
+      return out;
+    });
+  }
+
+  // Mean daily maximum for July across a span of years. This is the input to the
+  // colour table the whole field currently runs on, so the tool has to compute it
+  // the same way in order to disagree with it honestly.
+  function julyMeanMax(lat, lon, fromYear, toYear) {
+    var key = 'rc:july:' + lat.toFixed(3) + ',' + lon.toFixed(3) + ':' + fromYear + '-' + toYear;
+    var hit = cacheGet(key);
+    if (hit) return Promise.resolve(hit);
+
+    var url = ARCHIVE +
+      '?latitude=' + lat.toFixed(4) + '&longitude=' + lon.toFixed(4) +
+      '&start_date=' + fromYear + '-07-01&end_date=' + toYear + '-07-31' +
+      '&daily=temperature_2m_max&timezone=auto';
+
+    return fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+      var sum = 0, n = 0;
+      var d = j.daily;
+      for (var i = 0; i < d.time.length; i++) {
+        if (d.time[i].slice(5, 7) !== '07') continue;
+        var v = d.temperature_2m_max[i];
+        if (v == null) continue;
+        sum += v; n++;
+      }
+      var res = { meanMaxC: n ? sum / n : null, days: n, fromYear: fromYear, toYear: toYear };
+      cacheSet(key, res);
+      return res;
+    });
+  }
+
+  // Which of the last `n` years had the hottest maternity season here? That is
+  // the year worth simulating, because a box only has to cook once.
+  function hottestRecentYear(lat, lon, endYear, n) {
+    var startYear = endYear - n + 1;
+    var url = ARCHIVE +
+      '?latitude=' + lat.toFixed(4) + '&longitude=' + lon.toFixed(4) +
+      '&start_date=' + startYear + '-05-01&end_date=' + endYear + '-08-31' +
+      '&daily=temperature_2m_max&timezone=auto';
+
+    return fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+      var byYear = {};
+      var d = j.daily;
+      for (var i = 0; i < d.time.length; i++) {
+        var mo = +d.time[i].slice(5, 7);
+        if (mo < 5 || mo > 8) continue;
+        var y = d.time[i].slice(0, 4);
+        var v = d.temperature_2m_max[i];
+        if (v == null) continue;
+        if (!byYear[y] || v > byYear[y]) byYear[y] = v;
+      }
+      var best = null;
+      Object.keys(byYear).forEach(function (y) {
+        if (!best || byYear[y] > best.maxC) best = { year: +y, maxC: byYear[y] };
+      });
+      return best;
+    });
+  }
+
+  var api = {
+    geocode: geocode,
+    fetchSeason: fetchSeason,
+    julyMeanMax: julyMeanMax,
+    hottestRecentYear: hottestRecentYear,
+    HOURLY: HOURLY
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Climate = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* ===== src/ui.js ===== */
+// Roostcast front end.
+//
+// Colour carries meaning throughout, so the ramp runs blue to cream to orange to
+// plum and never touches the red/green axis. Every colour claim is also written
+// out in words and repeated as a number, because a colour scale is a nice-to-have
+// and a sentence is not.
+
+(function () {
+  'use strict';
+
+  var T = window.Thermal, P = window.Presets, C = window.Climate, S = window.Solar;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var state = {
+    site: null,
+    climate: null,
+    result: null,
+    julyMax: null,
+    season: { start: '05-01', end: '08-31' }
+  };
+
+  // ------------------------------------------------------------------- colour
+
+  // Piecewise ramp keyed to the biology, not to a gradient that looks nice:
+  // blue is too cold to raise pups, cream is the band they need, orange is heat
+  // stress, plum is the range where evaporative water loss turns lethal.
+  var STOPS = [
+    [  0, [ 20,  52,  92]],
+    [ 12, [ 52, 106, 158]],
+    [ 22, [176, 205, 224]],
+    [ 26, [244, 238, 222]],
+    [ 36, [240, 224, 186]],
+    [ 40, [230, 160,  60]],
+    [ 45, [186,  92,  22]],
+    [ 50, [124,  40,  30]],
+    [ 60, [ 58,  12,  42]]
+  ];
+
+  function ramp(t) {
+    if (t <= STOPS[0][0]) return STOPS[0][1];
+    for (var i = 1; i < STOPS.length; i++) {
+      if (t <= STOPS[i][0]) {
+        var a = STOPS[i - 1], b = STOPS[i];
+        var f = (t - a[0]) / (b[0] - a[0]);
+        return [
+          Math.round(a[1][0] + (b[1][0] - a[1][0]) * f),
+          Math.round(a[1][1] + (b[1][1] - a[1][1]) * f),
+          Math.round(a[1][2] + (b[1][2] - a[1][2]) * f)
+        ];
+      }
+    }
+    return STOPS[STOPS.length - 1][1];
+  }
+  function rgb(c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
+
+  // What a bat in this box actually gets at this hour: the chamber nearest the
+  // band it needs. If one is inside the band, that is the answer; otherwise it is
+  // the closest miss, which is the best the colony can do.
+  function bestAvailable(result, h) {
+    var lo = P.THRESHOLDS.coldTorpor, hi = P.THRESHOLDS.heatStress;
+    var best = null, bestMiss = Infinity;
+    for (var c = 0; c < result.chambers.length; c++) {
+      var t = result.chambers[c][h];
+      var miss = t < lo ? lo - t : (t > hi ? t - hi : 0);
+      if (miss < bestMiss) { bestMiss = miss; best = t; }
+      if (miss === 0) break;
+    }
+    return best;
+  }
+
+  // ------------------------------------------------------------------ controls
+
+  function fillSelects() {
+    var d = $('design');
+    Object.keys(P.DESIGNS).forEach(function (k) {
+      d.appendChild(new Option(P.DESIGNS[k].label, k));
+    });
+    d.value = 'four';
+
+    var c = $('color');
+    P.COLORS.forEach(function (x) { c.appendChild(new Option(x.label, x.id)); });
+    c.value = 'dark';
+
+    var m = $('mount');
+    Object.keys(P.MOUNTS).forEach(function (k) {
+      m.appendChild(new Option(P.MOUNTS[k].label, k));
+    });
+
+    var f = $('facing');
+    [['N', 0], ['NE', 45], ['E', 90], ['SE', 135],
+     ['S', 180], ['SW', 225], ['W', 270], ['NW', 315]].forEach(function (x) {
+      f.appendChild(new Option(x[0], x[1]));
+    });
+    f.value = 180;
+
+    var e = $('exposure');
+    Object.keys(P.EXPOSURES).forEach(function (k) {
+      e.appendChild(new Option(P.EXPOSURES[k].label, k));
+    });
+
+    var y = $('year');
+    var now = new Date().getFullYear();
+    y.appendChild(new Option('Hottest of the last 10 years', 'hottest'));
+    for (var yr = now - 1; yr >= now - 12; yr--) y.appendChild(new Option(yr, yr));
+  }
+
+  function readConfig() {
+    return {
+      design: $('design').value,
+      color: $('color').value,
+      mount: $('mount').value,
+      facing: +$('facing').value,
+      exposure: $('exposure').value,
+      heightM: +$('height').value,
+      material: 'pine',
+      colony: 60
+    };
+  }
+
+  // ----------------------------------------------------------------- geocoding
+
+  var searchTimer = null;
+  $('q').addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    var q = this.value.trim();
+    if (q.length < 3) { $('hits').className = 'hits'; return; }
+    searchTimer = setTimeout(function () {
+      C.geocode(q).then(function (rows) {
+        var ul = $('hits');
+        ul.innerHTML = '';
+        if (!rows.length) { ul.className = 'hits'; return; }
+        rows.forEach(function (r) {
+          // Place names come back from a third-party geocoder, so they go in as
+          // text, never as markup.
+          var li = document.createElement('li');
+          var top = document.createElement('div');
+          top.textContent = r.name;
+          var sub = document.createElement('div');
+          sub.className = 'sub';
+          sub.textContent = r.admin + ' · ' + r.latitude.toFixed(3) + ', ' + r.longitude.toFixed(3);
+          li.appendChild(top); li.appendChild(sub);
+          li.onclick = function () {
+            $('lat').value = r.latitude.toFixed(3);
+            $('lon').value = r.longitude.toFixed(3);
+            $('q').value = r.name + (r.admin ? ', ' + r.admin : '');
+            ul.className = 'hits';
+          };
+          ul.appendChild(li);
+        });
+        ul.className = 'hits on';
+      }).catch(function () { $('hits').className = 'hits'; });
+    }, 260);
+  });
+  document.addEventListener('click', function (ev) {
+    if (!$('q').contains(ev.target) && !$('hits').contains(ev.target)) {
+      $('hits').className = 'hits';
+    }
+  });
+
+  // ------------------------------------------------------------------- running
+
+  $('run').addEventListener('click', function () {
+    var lat = +$('lat').value, lon = +$('lon').value;
+    if (isNaN(lat) || isNaN(lon)) { $('err').textContent = 'Need a latitude and longitude.'; return; }
+    $('err').textContent = '';
+    $('run').disabled = true;
+    $('spin').textContent = 'Pulling the season…';
+
+    var pick = $('year').value;
+    var now = new Date().getFullYear();
+    var yearP = pick === 'hottest'
+      ? C.hottestRecentYear(lat, lon, now - 1, 10).then(function (b) { return b ? b.year : now - 1; })
+      : Promise.resolve(+pick);
+
+    yearP.then(function (year) {
+      state.year = year;
+      return Promise.all([
+        C.fetchSeason(lat, lon, year, state.season.start, state.season.end),
+        C.julyMeanMax(lat, lon, Math.max(1991, now - 20), now - 1)
+      ]);
+    }).then(function (both) {
+      state.climate = both[0];
+      state.site = both[0].site;
+      state.julyMax = both[1];
+      $('spin').textContent = 'Simulating…';
+      return new Promise(function (res) { setTimeout(res, 20); });
+    }).then(function () {
+      var cfg = readConfig();
+      state.result = T.simulate(state.climate, state.site, cfg);
+      state.cfg = cfg;
+      // Unhide before drawing. A canvas inside a display:none parent measures
+      // zero, and a canvas told to be zero pixels wide quietly reverts to 300.
+      $('results').className = 'on';
+      renderAll();
+      $('spin').textContent = '';
+      return runSweep(cfg);
+    }).then(function () {
+      $('run').disabled = false;
+      $('spin').textContent = '';
+    }).catch(function (e) {
+      $('err').textContent = e.message || String(e);
+      $('run').disabled = false;
+      $('spin').textContent = '';
+    });
+  });
+
+  // -------------------------------------------------------------------- render
+
+  function renderAll() {
+    renderSiteBar();
+    renderVerdict();
+    renderStats();
+    renderHeatmap();
+    renderWorstDay();
+  }
+
+  function renderSiteBar() {
+    var s = state.site;
+    $('sitebar').innerHTML =
+      '<span>' + s.latitude.toFixed(3) + ', ' + s.longitude.toFixed(3) + '</span>' +
+      '<span>' + Math.round(s.elevation) + ' m</span>' +
+      '<span>' + s.timezone + '</span>' +
+      '<span>season ' + state.year + '</span>';
+  }
+
+  function renderVerdict() {
+    var sc = T.score(state.result);
+    var box = state.result.box;
+    var el = $('verdict');
+    var head, why, cls;
+
+    var lockDays = 0;
+    Object.keys(sc.daily).forEach(function (d) { if (sc.daily[d].lockout > 0) lockDays++; });
+
+    if (sc.lethalHours > 0) {
+      cls = 'bad';
+      head = 'This box reaches ' + sc.peakC.toFixed(0) + ' °C. That kills bats.';
+      why = 'For ' + sc.lethalHours + ' hour' + (sc.lethalHours === 1 ? '' : 's') +
+        ' of the season some part of the box sits past 50 °C, and for ' + sc.lockoutHours +
+        ' hours there is no chamber below 40 °C to move to. A bat cannot fly out in daylight, and ' +
+        'evaporative cooling at those temperatures costs more body water than it has. ' +
+        'The worst of it falls on ' + fmtDate(sc.peakAt) + '.';
+    } else if (sc.lockoutHours > 0) {
+      cls = 'bad';
+      head = 'No refuge for ' + sc.lockoutHours + ' hours across ' + lockDays + ' days.';
+      why = 'On those hours every chamber sits above 40 °C at once, so there is nowhere cooler to ' +
+        'move. Peak ' + sc.peakC.toFixed(0) + ' °C on ' + fmtDate(sc.peakAt) + '. ' +
+        'Pups are the ones that cannot leave.';
+    } else if (sc.refugePct >= 70) {
+      cls = 'good';
+      head = 'Workable. A survivable chamber on ' + sc.refugePct.toFixed(0) + '% of daylight hours.';
+      why = 'Peak ' + sc.peakC.toFixed(0) + ' °C, and the box never runs out of cooler chambers. ' +
+        'Front-to-back spread averages ' + sc.meanGradient.toFixed(1) + ' °C, which is the room ' +
+        'the colony has to move around in.';
+    } else if (sc.coldHours > sc.dayHours * 0.3) {
+      cls = 'warn';
+      head = 'Too cold. Only ' + sc.refugePct.toFixed(0) + '% of daylight hours are usable.';
+      why = 'The box spends ' + sc.coldHours + ' daylight hours below 22 °C throughout, which pushes ' +
+        'gestating and nursing females into torpor and slows pups down. It needs more sun or a ' +
+        'darker colour.';
+    } else {
+      cls = 'warn';
+      head = 'Marginal. A survivable chamber on ' + sc.refugePct.toFixed(0) + '% of daylight hours.';
+      why = 'Peak ' + sc.peakC.toFixed(0) + ' °C on ' + fmtDate(sc.peakAt) + '. ' +
+        'No total lockout, but the margin is thin.';
+    }
+
+    var mountNote = box.mount.note;
+    el.className = 'verdict ' + cls;
+    el.innerHTML = '<p>' + head + '</p><p class="why">' + why + '</p>' +
+      '<p class="why"><strong>' + box.mount.label + '.</strong> ' + mountNote + '</p>';
+  }
+
+  function renderStats() {
+    var sc = T.score(state.result);
+    var items = [
+      ['refuge', sc.refugePct.toFixed(0) + '%', 'daylight hours with a chamber in 22–40 °C', ''],
+      ['lock', sc.lockoutHours, 'hours with every chamber past 40 °C', sc.lockoutHours > 0 ? 'alarm' : ''],
+      ['acute', sc.acuteHours, 'hours anywhere past 45 °C', sc.acuteHours > 0 ? 'caution' : ''],
+      ['peak', sc.peakC.toFixed(1) + ' °C', 'hottest the box gets, ' + fmtDate(sc.peakAt), ''],
+      ['cold', sc.coldHours, 'daylight hours too cold throughout', sc.coldHours > 0 ? 'caution' : ''],
+      ['grad', sc.meanGradient.toFixed(1) + ' °C', 'average front-to-back choice', '']
+    ];
+    $('stats').innerHTML = items.map(function (i) {
+      return '<div class="stat ' + i[3] + '"><div class="n">' + i[1] + '</div>' +
+             '<div class="k">' + i[2] + '</div></div>';
+    }).join('');
+  }
+
+  function renderHeatmap() {
+    var r = state.result;
+    var days = [], seen = {};
+    for (var h = 0; h < r.time.length; h++) {
+      var d = r.time[h].slice(0, 10);
+      if (!seen[d]) { seen[d] = true; days.push(d); }
+    }
+    var cv = $('heat');
+    var wCss = Math.max(320, cv.parentNode.clientWidth - 42);
+    var dpr = window.devicePixelRatio || 1;
+    var padL = 34, padB = 26, padT = 6;
+    var plotW = wCss - padL, plotH = 380;
+    cv.style.height = (plotH + padB + padT) + 'px';
+    cv.width = wCss * dpr; cv.height = (plotH + padB + padT) * dpr;
+    var g = cv.getContext('2d');
+    g.scale(dpr, dpr);
+    g.clearRect(0, 0, wCss, plotH + padB + padT);
+
+    var cw = plotW / days.length, ch = plotH / 24;
+    var idx = 0;
+    for (var i = 0; i < r.time.length; i++) {
+      var dd = days.indexOf(r.time[i].slice(0, 10));
+      var hh = +r.time[i].slice(11, 13);
+      g.fillStyle = rgb(ramp(bestAvailable(r, i)));
+      g.fillRect(padL + dd * cw, padT + hh * ch, Math.ceil(cw) + 0.5, Math.ceil(ch) + 0.5);
+    }
+
+    var ink = getComputedStyle(document.body).getPropertyValue('--muted').trim();
+    g.fillStyle = ink; g.font = '10px ui-monospace, monospace'; g.textAlign = 'right';
+    [0, 6, 12, 18].forEach(function (hr) {
+      g.fillText(String(hr).padStart(2, '0') + ':00', padL - 6, padT + hr * ch + 9);
+    });
+    g.textAlign = 'center';
+    var step = Math.ceil(days.length / 8);
+    for (var k = 0; k < days.length; k += step) {
+      g.fillText(days[k].slice(5), padL + k * cw + cw / 2, plotH + padT + 16);
+    }
+
+    $('hmnote').textContent =
+      'Colour is the best chamber available at that hour — what a bat would move to. ' +
+      'Cream is the band pups need. Blue is too cold to grow in; orange and plum mean the whole ' +
+      'box has gone past what the colony can tolerate.';
+
+    $('hmlegend').innerHTML = [
+      [10, 'below 22 °C — torpor, pups develop slowly'],
+      [30, '22–40 °C — the band that works'],
+      [43, '40–45 °C — heat stress, no refuge left'],
+      [52, 'past 50 °C — lethal water loss']
+    ].map(function (x) {
+      return '<span><i class="sw" style="background:' + rgb(ramp(x[0])) + '"></i>' + x[1] + '</span>';
+    }).join('');
+  }
+
+  function renderWorstDay() {
+    var r = state.result, sc = T.score(r);
+    var day = sc.peakAt.slice(0, 10);
+    var idx = [];
+    for (var h = 0; h < r.time.length; h++) if (r.time[h].slice(0, 10) === day) idx.push(h);
+
+    var cv = $('dayplot');
+    var wCss = Math.max(320, cv.parentNode.clientWidth - 42);
+    var dpr = window.devicePixelRatio || 1;
+    var padL = 38, padR = 8, padT = 10, padB = 26, plotH = 250;
+    cv.style.height = (plotH + padT + padB) + 'px';
+    cv.width = wCss * dpr; cv.height = (plotH + padT + padB) * dpr;
+    var g = cv.getContext('2d'); g.scale(dpr, dpr);
+    g.clearRect(0, 0, wCss, plotH + padT + padB);
+
+    var lo = 5, hi = Math.max(50, Math.ceil(sc.peakC / 5) * 5 + 5);
+    var plotW = wCss - padL - padR;
+    var X = function (i) { return padL + plotW * i / (idx.length - 1); };
+    var Y = function (t) { return padT + plotH * (1 - (t - lo) / (hi - lo)); };
+
+    var line = getComputedStyle(document.body).getPropertyValue('--line').trim();
+    var muted = getComputedStyle(document.body).getPropertyValue('--muted').trim();
+
+    // The band that works. Kept quiet: it is the backdrop, not the subject.
+    var bandTop = Y(P.THRESHOLDS.heatStress);
+    var bandBot = Y(P.THRESHOLDS.coldTorpor);
+    g.fillStyle = rgb(ramp(30)); g.globalAlpha = 0.16;
+    g.fillRect(padL, bandTop, plotW, bandBot - bandTop);
+    g.globalAlpha = 1;
+    g.strokeStyle = rgb(ramp(41)); g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(padL, bandTop); g.lineTo(wCss - padR, bandTop); g.stroke();
+    g.strokeStyle = rgb(ramp(16));
+    g.beginPath(); g.moveTo(padL, bandBot); g.lineTo(wCss - padR, bandBot); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = muted; g.font = '10px ui-monospace, monospace'; g.textAlign = 'left';
+    g.fillText('40 °C  heat stress', padL + 6, bandTop - 4);
+    g.fillText('22 °C  torpor', padL + 6, bandBot + 12);
+    g.strokeStyle = line; g.lineWidth = 1;
+    g.fillStyle = muted; g.font = '10px ui-monospace, monospace'; g.textAlign = 'right';
+    for (var t = 10; t <= hi; t += 10) {
+      g.beginPath(); g.moveTo(padL, Y(t)); g.lineTo(wCss - padR, Y(t)); g.stroke();
+      g.fillText(t + '°', padL - 6, Y(t) + 3);
+    }
+    g.textAlign = 'center';
+    for (var hh = 0; hh < idx.length; hh += 4) {
+      g.fillText(String(hh).padStart(2, '0'), X(hh), plotH + padT + 16);
+    }
+
+    // Ambient, for reference.
+    g.strokeStyle = muted; g.setLineDash([3, 3]); g.lineWidth = 1.2;
+    g.beginPath();
+    idx.forEach(function (h, i) { i ? g.lineTo(X(i), Y(r.ambient[h])) : g.moveTo(X(i), Y(r.ambient[h])); });
+    g.stroke(); g.setLineDash([]);
+
+    // One line per chamber, front to back. Sequential lightness on one hue, so
+    // the order reads as an order rather than as four unrelated categories.
+    var n = r.chambers.length;
+    var legend = ['<span><i class="sw" style="background:' + muted + '"></i>outside air</span>'];
+    // Dash pattern carries the same ordering as the colour, so the chart still
+    // reads if the lightness steps are hard to separate.
+    var DASH = [[], [7, 3], [3, 3], [2, 4], [9, 3, 2, 3]];
+    for (var c = 0; c < n; c++) {
+      var shade = n === 1 ? 0 : c / (n - 1);
+      var col = 'rgb(' + Math.round(70 + shade * 80) + ',' +
+                Math.round(90 + shade * 75) + ',' + Math.round(175 + shade * 50) + ')';
+      g.strokeStyle = col; g.lineWidth = 2.2;
+      g.setLineDash(DASH[c % DASH.length]);
+      g.beginPath();
+      idx.forEach(function (h, i) {
+        var v = r.chambers[c][h];
+        i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v));
+      });
+      g.stroke();
+      g.setLineDash([]);
+      legend.push('<span><i class="sw" style="background:' + col + '"></i>chamber ' + (c + 1) +
+                  (c === 0 ? ' (front)' : (c === n - 1 ? ' (back)' : '')) + '</span>');
+    }
+    $('dplegend').innerHTML = legend.join('');
+    $('worstTitle').textContent = 'The worst day — ' +
+      new Date(day + 'T12:00').toLocaleDateString(undefined,
+        { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  }
+
+  // -------------------------------------------------------------------- sweep
+
+  function runSweep(current) {
+    var colors = P.COLORS.map(function (c) { return c.id; });
+    var facings = [0, 45, 90, 135, 180, 225, 270, 315];
+    var mounts = ['pole', 'building'];
+    var jobs = [];
+    colors.forEach(function (col) {
+      mounts.forEach(function (mt) {
+        facings.forEach(function (fa) {
+          jobs.push({ color: col, mount: mt, facing: fa });
+        });
+      });
+    });
+
+    var rows = [];
+    var i = 0;
+    $('spin').textContent = 'Trying ' + jobs.length + ' configurations…';
+
+    return new Promise(function (resolve) {
+      function chunk() {
+        var t0 = performance.now();
+        while (i < jobs.length && performance.now() - t0 < 60) {
+          var j = jobs[i++];
+          var cfg = Object.assign({}, current, j, { subSteps: 12 });
+          var sc = T.score(T.simulate(state.climate, state.site, cfg));
+          rows.push({ cfg: j, sc: sc });
+        }
+        $('spin').textContent = 'Trying configurations… ' + i + '/' + jobs.length;
+        if (i < jobs.length) { requestAnimationFrame(chunk); }
+        else { renderSweep(rows, current); resolve(); }
+      }
+      requestAnimationFrame(chunk);
+    });
+  }
+
+  var COMPASS = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
+
+  function renderSweep(rows, current) {
+    // Never leave the colony without a refuge; then minimise time in the acute
+    // band; only then maximise how much of the box is usable. That order matters
+    // — a darker box is warmer more of the time and lethal at the top end, and
+    // ranking on the average would pick it.
+    rows.sort(function (a, b) {
+      return a.sc.lockoutHours - b.sc.lockoutHours ||
+             a.sc.acuteHours - b.sc.acuteHours ||
+             b.sc.usablePct - a.sc.usablePct;
+    });
+    state.sweep = rows;
+
+    // Best row for each colour rather than the top eight, which would be eight
+    // near-identical whites. The question is which colour and which way round,
+    // not which of eight indistinguishable whites wins by a tenth of a point.
+    var top = [], seenColor = {}, seenMount = {};
+    rows.forEach(function (r) {
+      if (!seenColor[r.cfg.color]) { seenColor[r.cfg.color] = 1; top.push(r); }
+    });
+    rows.forEach(function (r) {
+      if (!seenMount[r.cfg.mount] && top.indexOf(r) === -1) {
+        seenMount[r.cfg.mount] = 1; top.push(r);
+      }
+    });
+    top.sort(function (a, b) { return rows.indexOf(a) - rows.indexOf(b); });
+
+    var cur = rows.filter(function (r) {
+      return r.cfg.color === current.color && r.cfg.mount === current.mount &&
+             r.cfg.facing === current.facing;
+    })[0];
+    var curRank = rows.indexOf(cur) + 1;
+    if (cur && top.indexOf(cur) === -1) top.push(cur);
+
+    var html = '<thead><tr><th>Colour</th><th>Mount</th><th>Faces</th>' +
+      '<th class="num">Usable</th><th class="num">No-refuge hrs</th>' +
+      '<th class="num">Past 45 °C</th><th class="num">Peak</th></tr></thead><tbody>';
+    top.forEach(function (r, n) {
+      var isCur = r === cur;
+      var cls = (n === 0 ? 'best' : '') + (isCur ? ' current' : '');
+      html += '<tr class="' + cls + '"><td>' + P.colorById(r.cfg.color).label +
+        (n === 0 ? '<span class="tag">best here</span>' : '') +
+        (isCur ? '<span class="tag">yours</span>' : '') + '</td>' +
+        '<td>' + P.MOUNTS[r.cfg.mount].label + '</td>' +
+        '<td>' + COMPASS[r.cfg.facing] + '</td>' +
+        '<td class="num">' + r.sc.usablePct.toFixed(0) + '%</td>' +
+        '<td class="num">' + r.sc.lockoutHours + '</td>' +
+        '<td class="num">' + r.sc.acuteHours + '</td>' +
+        '<td class="num">' + r.sc.peakC.toFixed(1) + '</td></tr>';
+    });
+    html += '</tbody>';
+    $('sweep').innerHTML = html;
+
+    renderTableComparison(rows, cur, curRank);
+  }
+
+  function renderTableComparison(rows, cur, curRank) {
+    if (!state.julyMax || state.julyMax.meanMaxC == null) { $('tablecmp').innerHTML = ''; return; }
+    var rec = P.tableRecommendation(state.julyMax.meanMaxC);
+    var best = rows[0];
+
+    // Best configuration available if you obey the colour table.
+    var obedient = rows.filter(function (r) { return r.cfg.color === rec.color; })[0];
+
+    var out = '<p>Mean July daily maximum here is <strong>' +
+      state.julyMax.meanMaxC.toFixed(1) + ' °C (' + rec.julyF.toFixed(0) + ' °F)</strong> over ' +
+      state.julyMax.fromYear + '–' + state.julyMax.toYear + '. The standard colour table says: ' +
+      '<strong>' + rec.label + '</strong>.</p>';
+
+    if (!obedient) { $('tablecmp').innerHTML = out; return; }
+
+    if (obedient.cfg.color === best.cfg.color) {
+      out += '<p>The simulation agrees on colour. ' + rec.label + ' ranks first here, ' +
+        best.sc.usablePct.toFixed(0) + '% of the box usable, best on a ' +
+        P.MOUNTS[best.cfg.mount].label.toLowerCase() + ' facing ' + COMPASS[best.cfg.facing] +
+        '. Note that the orientation and the mount are doing work the table never mentions.</p>';
+    } else {
+      var dUse = best.sc.usablePct - obedient.sc.usablePct;
+      var dAcute = obedient.sc.acuteHours - best.sc.acuteHours;
+      var dLock = obedient.sc.lockoutHours - best.sc.lockoutHours;
+      out += '<p>The simulation disagrees. The best you can do while obeying the table is ' +
+        P.colorById(obedient.cfg.color).label.toLowerCase() + ' facing ' + COMPASS[obedient.cfg.facing] +
+        ': ' + obedient.sc.usablePct.toFixed(0) + '% of the box usable, ' +
+        obedient.sc.lockoutHours + ' hours with no cool chamber anywhere, peak ' +
+        obedient.sc.peakC.toFixed(1) + ' °C. Switching to <strong>' +
+        P.colorById(best.cfg.color).label.toLowerCase() + '</strong> facing ' + COMPASS[best.cfg.facing] +
+        ' gives ' + best.sc.usablePct.toFixed(0) + '%, ' + best.sc.lockoutHours +
+        ' hours, peak ' + best.sc.peakC.toFixed(1) + ' °C.</p>';
+
+      if (dUse < 0) {
+        out += '<p>Read that carefully: the table\'s colour is usable <em>more</em> of the time, by ' +
+          Math.abs(dUse).toFixed(0) + ' points. It is also the one that cooks. It buys ' +
+          'comfortable afternoons in June and pays for them with ' + dAcute + ' extra hours past ' +
+          '45 °C and ' + dLock + ' extra hours with nowhere to retreat. A colony can sit out a cool ' +
+          'week. It cannot sit out an afternoon at 47 °C.</p>';
+      }
+      out += '<p>The table knows one number about this place: an average. Bats die on the ' +
+        'extremes. It cannot see your latitude, which way the box points, whether its back is ' +
+        'against a wall, or that the sun striking a vertical south wall in late August is nothing ' +
+        'like the sun striking it in June.</p>';
+    }
+    if (cur) {
+      out += '<p>Your configuration ranks ' + curRank + ' of ' + rows.length + '.</p>';
+    }
+    $('tablecmp').innerHTML = out;
+  }
+
+  // -------------------------------------------------------------------- utils
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso + ':00');
+    return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) +
+      ', ' + iso.slice(11, 16);
+  }
+
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    if (!state.result) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { renderHeatmap(); renderWorstDay(); }, 180);
+  });
+
+  fillSelects();
+})();
+
+</script>
+</body>
+</html>

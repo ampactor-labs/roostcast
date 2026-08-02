@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roostcast — will this bat house cook?</title>
+<meta name="description" content="Simulates the temperature inside a bat house, hour by hour through the maternity season, at your exact location.">
+<style>
+:root{
+  --bg:#fbf9f5; --panel:#ffffff; --ink:#1c1a17; --muted:#6b6560; --line:#e3ddd2;
+  --accent:#0b6a9e; --accent-soft:#e6f0f6; --warn:#b35806; --hot:#7d2b12;
+  --cold:#2c5f8a; --good:#4a6f52;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#15140f; --panel:#1e1c17; --ink:#ece7dd; --muted:#9b948a; --line:#332f27;
+         --accent:#4aa8dc; --accent-soft:#152731; --warn:#e08214; --hot:#f08b5c; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans);
+     -webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px 80px}
+
+header{padding:52px 0 30px;border-bottom:1px solid var(--line);margin-bottom:34px}
+h1{font-size:clamp(28px,4.4vw,42px);line-height:1.08;margin:0 0 12px;letter-spacing:-.02em}
+h1 .dim{color:var(--muted);font-weight:400}
+.lede{font-size:17px;color:var(--muted);max-width:62ch;margin:0}
+.lede strong{color:var(--ink);font-weight:600}
+
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+   margin:0 0 14px;font-weight:600}
+h3{font-size:17px;margin:0 0 8px;letter-spacing:-.01em}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
+
+label{display:block;font-size:13px;color:var(--muted);margin:0 0 5px;font-weight:500}
+.field{margin-bottom:14px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input,select,button{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:7px;padding:9px 11px;width:100%}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+button{cursor:pointer;background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+button:hover{filter:brightness(1.08)}
+button:disabled{opacity:.5;cursor:default}
+button.ghost{background:transparent;color:var(--accent);border-color:var(--line);font-weight:500}
+
+.hits{list-style:none;margin:8px 0 0;padding:0;border:1px solid var(--line);border-radius:7px;
+      overflow:hidden;display:none}
+.hits.on{display:block}
+.hits li{padding:9px 11px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--line)}
+.hits li:last-child{border-bottom:0}
+.hits li:hover{background:var(--accent-soft)}
+.hits .sub{color:var(--muted);font-size:12.5px}
+
+.sitebar{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:12.5px;
+         color:var(--muted);margin-top:10px}
+
+#results{display:none}
+#results.on{display:block}
+
+.verdict{border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:10px;
+         background:var(--panel);padding:24px;margin-bottom:22px}
+.verdict.bad{border-left-color:var(--hot)}
+.verdict.warn{border-left-color:var(--warn)}
+.verdict.good{border-left-color:var(--good)}
+.verdict p{margin:0 0 10px;font-size:19px;line-height:1.42;letter-spacing:-.01em}
+.verdict p:last-child{margin-bottom:0}
+.verdict .why{font-size:15px;color:var(--muted)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+       background:var(--line);border:1px solid var(--line);border-radius:10px;
+       overflow:hidden;margin-bottom:24px}
+.stat{background:var(--panel);padding:15px 16px}
+.stat .n{font-size:26px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stat .k{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.35}
+.stat.alarm .n{color:var(--hot)}
+.stat.caution .n{color:var(--warn)}
+
+canvas{width:100%;display:block;border-radius:6px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.legend span{display:flex;align-items:center;gap:5px}
+.sw{width:13px;height:13px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:13px}
+tr.best td{background:var(--accent-soft)}
+tr.current td{font-weight:600}
+.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);
+     color:var(--accent);margin-left:6px;font-weight:600}
+
+details{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-size:14px;color:var(--accent);font-weight:500}
+details .body{font-size:14.5px;color:var(--muted);margin-top:10px;max-width:70ch}
+details .body p{margin:0 0 10px}
+details .body code{font-family:var(--mono);font-size:13px;background:var(--accent-soft);
+  padding:1px 4px;border-radius:3px}
+
+.note{font-size:13.5px;color:var(--muted);margin-top:8px}
+.err{color:var(--hot);font-size:14px;margin-top:10px}
+.spin{font-size:14px;color:var(--muted)}
+footer{margin-top:56px;padding-top:24px;border-top:1px solid var(--line);
+       font-size:13.5px;color:var(--muted);max-width:74ch}
+footer a{color:var(--accent)}
+footer p{margin:0 0 10px}
+.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Roostcast <span class="dim">— will this bat house cook?</span></h1>
+  <p class="lede">Bat house guidance still decides paint colour from one number: the average July high.
+  <strong>Under 85 °F, paint it black.</strong> That rule was written before boxes in full sun were
+  measured at 55 °C, hot enough to kill a colony in an afternoon. This simulates your box instead —
+  hour by hour, chamber by chamber, through a real maternity season at your coordinates.</p>
+</header>
+
+<div class="grid">
+  <div class="card">
+    <h2>Where</h2>
+    <div class="field">
+      <label for="q">Town, address, or landmark</label>
+      <input id="q" type="text" placeholder="Austin, Texas" autocomplete="off">
+      <ul class="hits" id="hits"></ul>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="lat">Latitude</label>
+        <input id="lat" type="number" step="0.001" value="30.267">
+      </div>
+      <div class="field">
+        <label for="lon">Longitude</label>
+        <input id="lon" type="number" step="0.001" value="-97.743">
+      </div>
+    </div>
+    <div class="field">
+      <label for="year">Season to simulate</label>
+      <select id="year"></select>
+    </div>
+    <div class="sitebar" id="sitebar"></div>
+  </div>
+
+  <div class="card">
+    <h2>The box</h2>
+    <div class="row">
+      <div class="field">
+        <label for="design">Design</label>
+        <select id="design"></select>
+      </div>
+      <div class="field">
+        <label for="color">Exterior colour</label>
+        <select id="color"></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="mount">Mounted on</label>
+        <select id="mount"></select>
+      </div>
+      <div class="field">
+        <label for="facing">Front faces</label>
+        <select id="facing"></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="exposure">Sun reaching it</label>
+        <select id="exposure"></select>
+      </div>
+      <div class="field">
+        <label for="height">Height above ground (m)</label>
+        <input id="height" type="number" step="0.5" min="1" max="12" value="4">
+      </div>
+    </div>
+    <button id="run">Simulate the season</button>
+    <div class="err" id="err"></div>
+    <div class="spin" id="spin"></div>
+  </div>
+</div>
+
+<div id="results">
+  <div class="verdict" id="verdict"></div>
+  <div class="stats" id="stats"></div>
+
+  <div class="card" style="margin-bottom:22px">
+    <h3>Every hour of the season</h3>
+    <p class="note" id="hmnote"></p>
+    <canvas id="heat" height="440"></canvas>
+    <div class="legend" id="hmlegend"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:22px">
+    <h3 id="worstTitle">The worst day</h3>
+    <p class="note">Each line is one chamber, front of the box to the back. The shaded band is
+    where a pregnant or nursing female can stay without going into torpor or overheating. If every
+    line leaves the band at once, the colony has nowhere to go: bats cannot relocate in daylight.</p>
+    <canvas id="dayplot" height="300"></canvas>
+    <div class="legend" id="dplegend"></div>
+  </div>
+
+  <div class="card">
+    <h3>What would work better here</h3>
+    <p class="note">Every combination of design, colour, orientation and mount, run against the same
+    season and ranked by how many daylight hours leave the colony somewhere survivable.</p>
+    <div class="scroll"><table id="sweep"></table></div>
+    <details>
+      <summary>How this compares to the standard colour table</summary>
+      <div class="body" id="tablecmp"></div>
+    </details>
+  </div>
+</div>
+
+<footer>
+  <p><strong>What this is.</strong> A transient thermal model of a bat house driven by ERA5
+  reanalysis weather for your coordinates. Nothing is fitted to the field measurements it is tested
+  against; the constants come from ASHRAE surface-property tables and published bat physiology.
+  Source, method and the validation run: <code>tools/validate.js</code> in the repository.</p>
+
+  <p><strong>What it is not.</strong> A substitute for a datalogger. Absolute temperatures carry
+  roughly ±5 °C of uncertainty, mostly from local shading and wind that a 9 km reanalysis grid cannot
+  see. The comparisons are far firmer than the absolute numbers, because a modelling error moves
+  every option in the same direction. Use it to choose between configurations, then verify the one
+  you install.</p>
+
+  <p><strong>Thermal thresholds</strong> 22–40 °C from Fontaine et al. 2021,
+  <em>Scientific Reports</em> 11:7728. Acute and lethal marks from de Mel, Baloun, Freeman &amp;
+  Czenze 2025, <em>Journal of Experimental Biology</em> 228:jeb251228. Colour table and placement
+  criteria from Merlin Tuttle's Bat Conservation. Weather from Open-Meteo's ERA5 archive.</p>
+
+  <p>Public domain (CC0). Built as a gift to the people who have spent their lives arguing that bats
+  are worth the trouble.</p>
+</footer>
+
+</div>
+
+<script src="src/solar.js"></script>
+<script src="src/presets.js"></script>
+<script src="src/thermal.js"></script>
+<script src="src/climate.js"></script>
+<script src="src/ui.js"></script>
+</body>
+</html>
