@@ -82,7 +82,8 @@ const SITES = [
   ['Minneapolis, MN',   44.978,  -93.265, 'cold end of the little brown bat range'],
   ['Portland, OR',      45.512, -122.658, 'mild summers, 2021 heat dome'],
   ['Lillooet, BC',      50.686, -121.936, 'de Mel study area; 2021 heat dome epicentre'],
-  ['Asheville, NC',     35.595,  -82.552, 'southern Appalachians, white-nose country']
+  ['Asheville, NC',     35.595,  -82.552, 'southern Appalachians, white-nose country'],
+  ['Salt Lake City, UT', 40.735, -111.960, 'Jordan River corridor; Great Basin wind and heat']
 ];
 
 const BOX = { design: 'four', exposure: 'full', heightM: 4, material: 'pine', colony: 60 };
@@ -111,23 +112,27 @@ function sweep(wx, mounts) {
 
 (async function main() {
   const useHottest = process.argv.includes('--hottest');
-  const now = new Date().getFullYear();
+  // Newest season with a full record: the window closes Aug 31 and ERA5 lands
+  // about five days behind, so from Sept 8 the current year counts.
+  const d = new Date();
+  const now = (d.getMonth() > 8 || (d.getMonth() === 8 && d.getDate() >= 8))
+    ? d.getFullYear() : d.getFullYear() - 1;
 
   console.log('\nRoostcast — the colour table versus the simulation');
-  console.log(useHottest ? 'Season: hottest of the last ten\n' : `Season: ${now - 1}\n`);
+  console.log(useHottest ? 'Season: hottest of the last ten\n' : `Season: ${now}\n`);
   console.log('Box held constant: four-chamber nursery, full sun, 4 m, pole or wall.\n');
 
   const header = ['site', 'yr', 'JulyF', 'table says', 'model says', 'usable', 'table usable', 'verdict'];
-  const w = [18, 5, 7, 14, 25, 8, 14, 0];
+  const w = [20, 5, 7, 14, 25, 8, 14, 0];
   console.log(header.map((h, i) => String(h).padEnd(w[i])).join(''));
-  console.log('-'.repeat(104));
+  console.log('-'.repeat(106));
 
   const disagreements = [];
 
   for (const [name, lat, lon, note] of SITES) {
-    const year = useHottest ? +(await hottestYear(lat, lon, now - 1, 10)) : now - 1;
+    const year = useHottest ? +(await hottestYear(lat, lon, now, 10)) : now;
     const wx = await season(lat, lon, year);
-    const jm = await julyMeanMax(lat, lon, Math.max(1991, now - 20), now - 1);
+    const jm = await julyMeanMax(lat, lon, Math.max(1991, now - 19), now);
     const rec = P.tableRecommendation(jm);
 
     const rows = sweep(wx, ['pole', 'building']);
@@ -149,7 +154,7 @@ function sweep(wx, mounts) {
       (same ? 'agrees' : 'DISAGREES'));
   }
 
-  console.log('\n' + '='.repeat(104));
+  console.log('\n' + '='.repeat(106));
   console.log(`${disagreements.length} of ${SITES.length} sites where the colour table picks a different colour than the simulation.\n`);
 
   for (const d of disagreements) {

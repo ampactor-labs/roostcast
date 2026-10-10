@@ -1,13 +1,59 @@
 # Roostcast
 
-Simulates the temperature inside a bat house, hour by hour, chamber by chamber,
-through a real maternity season at your coordinates. Tells you whether the box
-you are about to hang will cook the colony that moves into it.
+A browser tool that simulates the temperature inside a bat house, hour by hour and chamber by chamber, through a real summer at your coordinates. It tells you whether the box you are about to hang will cook the colony that moves into it. With no fitted constants, it lands within 1.6 °C of a roost measured in the 2021 heat dome. It is plain JavaScript in one HTML file, with hourly ERA5 weather from Open-Meteo.
 
-Open `dist/roostcast.html` in a browser. Nothing to install; no account; works
-from a USB stick.
+**Status: working.** Absolute temperatures carry about ±5 °C, and the model has been tested against published summaries only, not yet against loggers of its own.
 
-## Why this exists
+Live: https://ampactor.dev/roostcast/
+
+![Roostcast on the Jordan River in Salt Lake City, summer 2026: a medium-brown four-chamber box on a pole in full sun has no cool chamber for 52 daylight hours and peaks at 47.3 °C](docs/screenshot.png)
+
+## Quick start
+
+Open https://ampactor.dev/roostcast/, or `dist/roostcast.html` straight from disk.
+Nothing to install; no account; works from a USB stick. Type a place, describe
+the box, press run. The first result arrives in a few seconds; the sweep of
+every colour, mount and orientation follows it.
+
+## Usage
+
+### Link to one box
+
+Query parameters set the form, so a proposal, an email or a QR code on a bat
+house can open the page on one exact box. Anything missing or not on the menus
+keeps its default. `run=1` starts the simulation on load.
+
+| Parameter | Values |
+|---|---|
+| `lat`, `lon` | decimal degrees |
+| `place` | label for the search box |
+| `design` | `single`, `three`, `four`, `rocket` |
+| `color` | `black`, `dark`, `medium`, `light`, `white` |
+| `mount` | `pole`, `building`, `tree` |
+| `facing` | degrees: `0`, `45`, ... `315` |
+| `exposure` | `full`, `morning`, `afternoon`, `partial`, `dappled`, `shade` |
+| `height` | metres, 1 to 12 |
+| `year` | a season on the menu, or `hottest` |
+
+The Jordan River in Salt Lake City, summer 2026, with the box from the
+Cuddlecast proposal:
+<https://ampactor.dev/roostcast/?lat=40.735&lon=-111.96&place=Jordan+River,+Salt+Lake+City&color=medium&mount=pole&facing=135&year=2026&run=1>
+
+### Command line
+
+```
+node tools/validate.js         # test against published measurements
+node tools/report.js           # colour table vs simulation, nine sites
+node tools/report.js --hottest # same, worst season of the last ten
+node tools/smoke.js            # drive the real page in headless Chrome
+node tools/build.js            # inline everything into dist/roostcast.html
+```
+
+Weather is cached under `.cache/`, so everything after the first run is offline.
+
+## How it works
+
+### Why this exists
 
 Bat house guidance decides paint colour from one number, the average July daily
 high:
@@ -43,10 +89,10 @@ it never reaches in June.
 
 So: stop looking the answer up, and simulate it.
 
-## What it does
+### What it reports
 
 Enter a location. It pulls hourly ERA5 reanalysis for that spot, picks the
-hottest of the last ten maternity seasons if you want the honest worst case, and
+hottest of the last ten maternity seasons if you want the worst case, and
 runs a transient thermal model of the box you describe: how many chambers, what
 colour, mounted on what, facing which way, in how much sun.
 
@@ -69,37 +115,46 @@ Then it sweeps every combination of colour, orientation and mount against the
 same season and ranks them, and tells you where the colour table and the
 simulation disagree about your site.
 
-## What I got wrong on the way
+### The model
 
-Worth saying, because the errors were large and the shape of them is instructive.
+`src/thermal.js` carries two nodes per wood panel, one per face, because a
+19 mm board in full sun is meaningfully hotter on the sunlit side than on the
+side the bats touch. Chamber air is solved algebraically each step from the
+surfaces around it, as a chimney with a buoyant draught. What it reports is
+operative temperature: the wood and the draught weighted by how strongly each
+reaches a roosting bat. The integration is explicit, and each hour takes as
+many substeps as that hour's wind needs to stay stable. The four large errors
+made on the way, and what each cost, are in
+[docs/model-errors.md](docs/model-errors.md).
 
-The first version put the wood's thermal resistance between the sunlit surface
-and the outside air. Sun is absorbed *at* that surface and convection happens at
-that same surface; there is no wood in between. Cost: about 19 °C.
+## Data
 
-The second put the solar azimuth 180° out, so at local noon the model had the sun
-due north. The consequence was quiet and nasty: a south-facing box was fed the
-irradiance of a north wall, the north-facing back panel got the southern sun, and
-the rear chamber came out hottest. Every gradient in the box ran backwards and
-nothing crashed.
+Hourly ERA5 and ERA5-Land reanalysis from the Open-Meteo historical weather
+API: free for non-commercial use, no key, hourly from 1940, on a grid of
+roughly 9 km. The page caches it in `localStorage`; the tools cache it under
+`.cache/`. Every threshold, constant and published number is in
+[REFERENCES.md](REFERENCES.md).
 
-The third modelled ventilation as building-style air changes per hour. A roosting
-crevice is 19 mm wide, open at the bottom, with hot wood on both faces: it is a
-chimney, and it turns over its own volume more than once a second. Treating it as
-infiltration was off by roughly eighty-fold and made every box about 12 °C too
-hot.
+## Project layout
 
-The fourth reported chamber air temperature as if that were what a bat
-experiences. It is not. A bat hangs pressed against wood with a buoyant draught
-running past it, so the model now reports operative temperature, weighting the
-wood and the air by their transfer coefficients. That is also much closer to what
-a logger taped inside a crevice actually records.
+```
+index.html          the page
+src/solar.js        sun position, irradiance on a tilted plane
+src/thermal.js      the box: panels, chambers, chimney flow, scoring
+src/presets.js      designs, colours, thresholds, the colour table
+src/climate.js      ERA5 via Open-Meteo, cached in localStorage
+src/ui.js           front end
+tools/              validate, report, smoke, build
+```
 
-None of the constants are fitted to the validation cases. They come from ASHRAE
-surface-property tables and from published bat physiology. `tools/validate.js` is
-a test, not a calibration.
+## Deploy
 
-## How well does it work
+GitHub Pages, from `.github/workflows/deploy.yml`, on every push to `main`.
+The job rebuilds `dist/roostcast.html`, fails if the committed copy is stale,
+and publishes it as the site's `index.html`. Pull requests run the same build
+without deploying.
+
+## Testing
 
 ```
 $ node tools/validate.js
@@ -132,18 +187,12 @@ wall at its back makes which way it points mean anything. And a south-facing
 vertical wall at 45° N takes its hardest sun in September, not at the solstice,
 because midsummer sun is too high to strike it squarely.
 
-### What is and is not comparable
+Why the seasonal share and the pooled maximum are compared the way they are is
+in [docs/validation.md](docs/validation.md). CI runs the build and the
+staleness check only. `validate.js` and `smoke.js` need live weather and are
+run by hand.
 
-Fontaine et al. report a pooled range of 6.5–44 °C for Classic boxes across seven
-Quebec sites. That lower bound proves the range is not a set of raw extremes:
-ERA5 puts the regional air minimum at −2.5 °C inside their recording window, and
-a 19 mm wooden box cannot sit nine degrees above air on a clear calm night. So
-their maximum is a maximum over many boxes at many sites, and a single simulated
-box should land under it. It does, by about 7 °C. Comparing those two numbers as
-though they were the same quantity would be the easiest available way to make
-this model look better than it is.
-
-## Where it is weak
+## Limitations
 
 Absolute temperatures carry roughly ±5 °C of uncertainty. Most of that is local
 shading and wind that a 9 km reanalysis grid cannot see; some of it is that I
@@ -167,36 +216,14 @@ a crevice obstruct the draught that cools it; the air in a tall crevice
 stratifies rather than mixing; and I assume the crevice bottoms are fully open
 across the box width.
 
-## Running it
+## Roadmap
 
-```
-node tools/validate.js         # test against published measurements
-node tools/report.js           # colour table vs simulation, eight sites
-node tools/report.js --hottest # same, worst season of the last ten
-node tools/smoke.js            # drive the real page in headless Chrome
-node tools/build.js            # inline everything into dist/roostcast.html
-```
+Field loggers. The Cuddlecast pilot on the Jordan River in Salt Lake City puts
+temperature loggers in front and rear chambers of 30 to 40 boxes, so the model
+can be scored on absolute temperature rather than on published summaries. It
+is not done yet because no boxes are up yet.
 
-Weather is cached under `.cache/`, so everything after the first run is offline.
-
-## Layout
-
-```
-index.html          the page
-src/solar.js        sun position, irradiance on a tilted plane
-src/thermal.js      the box: panels, chambers, chimney flow, scoring
-src/presets.js      designs, colours, thresholds, the colour table
-src/climate.js      ERA5 via Open-Meteo, cached in localStorage
-src/ui.js           front end
-tools/              validate, report, smoke, build
-```
-
-## Sources
-
-Thresholds, constants and every published number this is tested against are in
-[REFERENCES.md](REFERENCES.md).
-
-## Licence
+## License
 
 CC0. Public domain. Take it, fork it, put your own name on it, fold the model
 into something better. If it helps one certification programme give
