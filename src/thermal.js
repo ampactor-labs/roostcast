@@ -205,12 +205,19 @@
     var alpha = box.color.alpha;
     var heightM = cfg.heightM == null ? 4.0 : cfg.heightM;
 
-    // 20 substeps is 3-minute integration. The explicit scheme needs dt under
-    // about 425 s to stay stable on the outer panel node, so anything above 9
-    // substeps per hour is safe; sweeps drop to 12 to run four times faster.
+    // 20 substeps is 3-minute integration; sweeps ask for 12 to run faster. That
+    // is a floor, not a promise. The explicit scheme is only stable on the outer
+    // panel node while dt < 2C/G, and G grows with wind: in light air it is about
+    // 38 W/m^2K and dt can reach 425 s, but a 10 m/s afternoon at 4 m (routine in
+    // the Great Basin) pushes it near 60 and 300 s steps blow up -- a front
+    // chamber at 69 C one hour and NaN the next. So each hour takes as many
+    // substeps as that hour's wind needs, holding dt under C/G, which also keeps
+    // the face from overshooting.
     var hours = climate.time.length;
     var subSteps = cfg.subSteps || 20;
-    var dt = 3600 / subSteps;
+    var faceC = box.mat.rho * box.mat.cp * (box.t / 2);   // J/m^2K per face node
+    var faceG = box.mat.k / (box.t / 2);                  // W/m^2K through the board
+    var hRadMax = 4 * EPS_WOOD * SIGMA * Math.pow(353, 3); // longwave at 80 C, an upper bound
 
     var nP = n + 1;
     var Pa = new Float64Array(nP);         // panel front-facing faces
@@ -264,6 +271,12 @@
       var hOut = exteriorFilm(vBox, Pa[0] - Ta0);
       var Tsky = skyTemperature(Ta0, dewPoint(Ta0, rh), cloud);
 
+      // Interior faces see at most ~18 W/m^2K from the crevice, so whichever of
+      // the two film sums is larger sets the step.
+      var gMax = faceG + Math.max(hOut + hRadMax, 18);
+      var steps = Math.max(subSteps, Math.ceil(3600 * gMax / faceC));
+      var dt = 3600 / steps;
+
       var irrP = new Float64Array(nP);
       for (var pi = 0; pi < nP; pi++) {
         var e = box.panels[pi].exterior;
@@ -280,8 +293,8 @@
       var day = sun.elevation > 0;
       var batW = day ? box.colony * P.BAT_WATTS : 0;
 
-      for (var s = 0; s < subSteps; s++) {
-        var Ta = Ta0 + (Ta1 - Ta0) * ((s + 0.5) / subSteps);
+      for (var s = 0; s < steps; s++) {
+        var Ta = Ta0 + (Ta1 - Ta0) * ((s + 0.5) / steps);
 
         // Chambers: quasi-steady between the two faces bounding them, plus the
         // crevice-edge contact with the lateral panels.

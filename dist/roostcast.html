@@ -769,12 +769,19 @@ footer p{margin:0 0 10px}
     var alpha = box.color.alpha;
     var heightM = cfg.heightM == null ? 4.0 : cfg.heightM;
 
-    // 20 substeps is 3-minute integration. The explicit scheme needs dt under
-    // about 425 s to stay stable on the outer panel node, so anything above 9
-    // substeps per hour is safe; sweeps drop to 12 to run four times faster.
+    // 20 substeps is 3-minute integration; sweeps ask for 12 to run faster. That
+    // is a floor, not a promise. The explicit scheme is only stable on the outer
+    // panel node while dt < 2C/G, and G grows with wind: in light air it is about
+    // 38 W/m^2K and dt can reach 425 s, but a 10 m/s afternoon at 4 m (routine in
+    // the Great Basin) pushes it near 60 and 300 s steps blow up -- a front
+    // chamber at 69 C one hour and NaN the next. So each hour takes as many
+    // substeps as that hour's wind needs, holding dt under C/G, which also keeps
+    // the face from overshooting.
     var hours = climate.time.length;
     var subSteps = cfg.subSteps || 20;
-    var dt = 3600 / subSteps;
+    var faceC = box.mat.rho * box.mat.cp * (box.t / 2);   // J/m^2K per face node
+    var faceG = box.mat.k / (box.t / 2);                  // W/m^2K through the board
+    var hRadMax = 4 * EPS_WOOD * SIGMA * Math.pow(353, 3); // longwave at 80 C, an upper bound
 
     var nP = n + 1;
     var Pa = new Float64Array(nP);         // panel front-facing faces
@@ -828,6 +835,12 @@ footer p{margin:0 0 10px}
       var hOut = exteriorFilm(vBox, Pa[0] - Ta0);
       var Tsky = skyTemperature(Ta0, dewPoint(Ta0, rh), cloud);
 
+      // Interior faces see at most ~18 W/m^2K from the crevice, so whichever of
+      // the two film sums is larger sets the step.
+      var gMax = faceG + Math.max(hOut + hRadMax, 18);
+      var steps = Math.max(subSteps, Math.ceil(3600 * gMax / faceC));
+      var dt = 3600 / steps;
+
       var irrP = new Float64Array(nP);
       for (var pi = 0; pi < nP; pi++) {
         var e = box.panels[pi].exterior;
@@ -844,8 +857,8 @@ footer p{margin:0 0 10px}
       var day = sun.elevation > 0;
       var batW = day ? box.colony * P.BAT_WATTS : 0;
 
-      for (var s = 0; s < subSteps; s++) {
-        var Ta = Ta0 + (Ta1 - Ta0) * ((s + 0.5) / subSteps);
+      for (var s = 0; s < steps; s++) {
+        var Ta = Ta0 + (Ta1 - Ta0) * ((s + 0.5) / steps);
 
         // Chambers: quasi-steady between the two faces bounding them, plus the
         // crevice-edge contact with the lateral panels.
@@ -1301,9 +1314,45 @@ footer p{margin:0 0 10px}
     });
 
     var y = $('year');
-    var now = new Date().getFullYear();
+    var last = lastSeason();
     y.appendChild(new Option('Hottest of the last 10 years', 'hottest'));
-    for (var yr = now - 1; yr >= now - 12; yr--) y.appendChild(new Option(yr, yr));
+    for (var yr = last; yr >= last - 11; yr--) y.appendChild(new Option(yr, yr));
+  }
+
+  // The newest maternity season with a full record. The window closes Aug 31 and
+  // ERA5 lands about five days behind, so from Sept 8 this year counts. Before
+  // this, an October run skipped the summer that had just happened, which in
+  // Salt Lake in 2026 was the hottest of the decade.
+  function lastSeason() {
+    var d = new Date(), y = d.getFullYear();
+    return (d.getMonth() > 8 || (d.getMonth() === 8 && d.getDate() >= 8)) ? y : y - 1;
+  }
+
+  // A link can open the page set up for one box:
+  //   ?lat=40.735&lon=-111.96&place=Jordan+River&color=medium&mount=pole&facing=135&run=1
+  // Anything missing or not on the menus keeps the default. The point is that a
+  // proposal, an email or a QR code on a bat house can say "this box" exactly.
+  function applyQuery() {
+    var q;
+    try { q = new URLSearchParams(window.location.search); } catch (e) { return false; }
+    var lat = parseFloat(q.get('lat')), lon = parseFloat(q.get('lon'));
+    if (isFinite(lat) && Math.abs(lat) <= 90 && isFinite(lon) && Math.abs(lon) <= 180) {
+      $('lat').value = lat.toFixed(3);
+      $('lon').value = lon.toFixed(3);
+    }
+    if (q.get('place')) $('q').value = q.get('place').slice(0, 80);
+    var pick = { design: 'design', color: 'color', mount: 'mount', facing: 'facing',
+                 exposure: 'exposure', year: 'year' };
+    Object.keys(pick).forEach(function (k) {
+      var v = q.get(k), el = $(pick[k]);
+      if (v == null) return;
+      for (var i = 0; i < el.options.length; i++) {
+        if (el.options[i].value === v) { el.value = v; return; }
+      }
+    });
+    var h = parseFloat(q.get('height'));
+    if (isFinite(h) && h >= 1 && h <= 12) $('height').value = h;
+    return q.get('run') === '1';
   }
 
   function readConfig() {
@@ -1369,16 +1418,16 @@ footer p{margin:0 0 10px}
     $('spin').textContent = 'Pulling the season…';
 
     var pick = $('year').value;
-    var now = new Date().getFullYear();
+    var now = lastSeason();
     var yearP = pick === 'hottest'
-      ? C.hottestRecentYear(lat, lon, now - 1, 10).then(function (b) { return b ? b.year : now - 1; })
+      ? C.hottestRecentYear(lat, lon, now, 10).then(function (b) { return b ? b.year : now; })
       : Promise.resolve(+pick);
 
     yearP.then(function (year) {
       state.year = year;
       return Promise.all([
         C.fetchSeason(lat, lon, year, state.season.start, state.season.end),
-        C.julyMeanMax(lat, lon, Math.max(1991, now - 20), now - 1)
+        C.julyMeanMax(lat, lon, Math.max(1991, now - 19), now)
       ]);
     }).then(function (both) {
       state.climate = both[0];
@@ -1786,6 +1835,7 @@ footer p{margin:0 0 10px}
   });
 
   fillSelects();
+  if (applyQuery()) $('run').click();
 })();
 
 </script>
